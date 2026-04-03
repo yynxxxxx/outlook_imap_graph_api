@@ -1,0 +1,26 @@
+{
+  "functions": {
+    "api/fetch-imap.js": {
+      "maxDuration": 10
+    },
+    "api/fetch-graph.js": {
+      "maxDuration": 10
+    },
+    "api/refresh-token.js": {
+      "maxDuration": 10
+    }
+  },
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/public/$1" }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "POST, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type" }
+      ]
+    }
+  ]
+}

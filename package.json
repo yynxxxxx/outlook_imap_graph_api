@@ -1,0 +1,14 @@
+{
+  "name": "outlook-dual-fetcher",
+  "version": "1.0.0",
+  "description": "Outlook 双协议快速取件 (IMAP OAuth2 + Graph API)",
+  "private": true,
+  "scripts": {
+    "dev": "node dev-server.js",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "imapflow": "^1.0.170",
+    "mailparser": "^3.7.2"
+  }
+}
