@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Outlook 双协议快速取件工具，支持 IMAP OAuth2 和 Graph API 两种协议同时获取邮件">
+  <title>Outlook 快速取件 | IMAP + Graph 双协议</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <!-- 动态背景 -->
+  <div class="bg-animation">
+    <div class="bg-orb bg-orb-1"></div>
+    <div class="bg-orb bg-orb-2"></div>
+    <div class="bg-orb bg-orb-3"></div>
+  </div>
+
+  <div class="app-container">
+    <!-- 顶部标题栏 -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="app-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="4" width="20" height="16" rx="2"/>
+            <path d="M22 7L12 13L2 7"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="app-title">Outlook 快速取件</h1>
+          <p class="app-subtitle">IMAP OAuth2 + Graph API 双协议</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="status-badge" id="statusBadge">
+          <span class="status-dot"></span>
+          <span class="status-text">就绪</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- 主体区域 -->
+    <div class="main-layout">
+      <!-- 左侧面板 - 邮箱管理 -->
+      <aside class="sidebar glass-panel">
+        <div class="panel-header">
+          <h2 class="panel-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            邮箱列表
+          </h2>
+          <span class="badge" id="accountCount">0</span>
+        </div>
+
+        <!-- 导入区域 -->
+        <div class="import-section">
+          <button class="btn btn-primary btn-full" id="btnOpenImport">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+            批量导入邮箱
+          </button>
+        </div>
+
+        <!-- 邮箱列表 -->
+        <div class="account-list" id="accountList">
+          <div class="empty-state" id="emptyState">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+              <rect x="2" y="4" width="20" height="16" rx="2"/>
+              <path d="M22 7L12 13L2 7"/>
+            </svg>
+            <p>暂无邮箱</p>
+            <p class="text-muted">点击上方按钮导入</p>
+          </div>
+        </div>
+
+        <!-- 底部操作 -->
+        <div class="sidebar-footer">
+          <button class="btn btn-ghost btn-small" id="btnClearAll">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+            </svg>
+            清空全部
+          </button>
+        </div>
+      </aside>
+
+      <!-- 右侧内容区 -->
+      <main class="content">
+        <!-- 搜索/取件控制区 -->
+        <div class="control-panel glass-panel">
+          <div class="control-row">
+            <div class="input-group flex-grow">
+              <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="M21 21l-4.35-4.35"/>
+              </svg>
+              <input type="text" id="searchKeyword" class="input" placeholder="搜索关键词（主题/正文）" />
+            </div>
+            <div class="input-group">
+              <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+              <input type="text" id="searchSender" class="input" placeholder="发件人过滤（可选）" />
+            </div>
+            <div class="input-group input-narrow">
+              <select id="fetchLimit" class="input select">
+                <option value="5">5 封</option>
+                <option value="10" selected>10 封</option>
+                <option value="20">20 封</option>
+                <option value="30">30 封</option>
+              </select>
+            </div>
+          </div>
+          <div class="control-row control-actions">
+            <div class="protocol-toggles">
+              <label class="toggle-label">
+                <input type="checkbox" id="toggleImap" checked>
+                <span class="toggle-pill">IMAP</span>
+              </label>
+              <label class="toggle-label">
+                <input type="checkbox" id="toggleGraph" checked>
+                <span class="toggle-pill">Graph</span>
+              </label>
+            </div>
+            <div class="action-buttons">
+              <button class="btn btn-primary" id="btnFetchSelected">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                选中取件
+              </button>
+              <button class="btn btn-accent" id="btnFetchAll">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                全部取件
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 取件进度 -->
+        <div class="progress-bar-container" id="progressContainer" style="display:none;">
+          <div class="progress-info">
+            <span id="progressText">取件中...</span>
+            <span id="progressPercent">0%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+        </div>
+
+        <!-- 邮件结果区域 -->
+        <div class="results-section">
+          <div class="results-header" id="resultsHeader" style="display:none;">
+            <h3 class="results-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="4" width="20" height="16" rx="2"/>
+                <path d="M22 7L12 13L2 7"/>
+              </svg>
+              取件结果
+            </h3>
+            <div class="results-meta">
+              <span class="badge badge-imap" id="imapCount" style="display:none;">IMAP: 0</span>
+              <span class="badge badge-graph" id="graphCount" style="display:none;">Graph: 0</span>
+              <span class="badge" id="totalCount">共 0 封</span>
+            </div>
+          </div>
+
+          <!-- 邮件列表 -->
+          <div class="email-list" id="emailList">
+            <div class="empty-state" id="emailEmpty">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.8">
+                <rect x="2" y="4" width="20" height="16" rx="2"/>
+                <path d="M22 7L12 13L2 7"/>
+              </svg>
+              <p>在左侧导入邮箱，然后点击取件</p>
+              <p class="text-muted">支持 IMAP OAuth2 + Graph API 双协议并行取件</p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- 导入弹窗 -->
+  <div class="modal-overlay" id="importModal">
+    <div class="modal glass-panel">
+      <div class="modal-header">
+        <h3>批量导入邮箱</h3>
+        <button class="btn-close" id="btnCloseModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-tip">每行一个，格式：<code>账号----密码----clientid----刷新令牌</code></p>
+        <p class="modal-tip text-muted">分隔符支持 1~4 个短横线（<code>-</code> 到 <code>----</code>）</p>
+        <textarea
+          id="importTextarea"
+          class="textarea"
+          rows="10"
+          placeholder="user@outlook.com----password123----client-id-here----refresh-token-here&#10;user2@outlook.com--pass--clientid--token"
+        ></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btnCancelImport">取消</button>
+        <button class="btn btn-primary" id="btnConfirmImport">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          确认导入
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 邮件详情弹窗 -->
+  <div class="modal-overlay" id="emailDetailModal">
+    <div class="modal modal-large glass-panel">
+      <div class="modal-header">
+        <h3 id="emailDetailSubject">邮件主题</h3>
+        <button class="btn-close" id="btnCloseDetail">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="email-detail-meta" id="emailDetailMeta"></div>
+        <div class="email-detail-body" id="emailDetailBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast 通知 -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
