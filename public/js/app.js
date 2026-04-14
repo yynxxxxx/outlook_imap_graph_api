@@ -10,6 +10,9 @@
 // ==================== 全局状态 ====================
 const STORAGE_KEY = 'outlook_accounts';
 
+// 追踪新导入的账号ID，用于高亮动画
+let _newlyAddedIds = new Set();
+
 /**
  * 获取所有已存储的账号
  */
@@ -123,38 +126,59 @@ function generateId() {
 
 /**
  * 渲染邮箱列表
+ * @param {Set} highlightIds - 需要高亮的新导入账号ID
  */
-function renderAccountList() {
+function renderAccountList(highlightIds = null) {
   const accounts = getAccounts();
   const listEl = document.getElementById('accountList');
   const countEl = document.getElementById('accountCount');
-  const emptyEl = document.getElementById('emptyState');
 
-  countEl.textContent = accounts.length;
+  // 更新计数，带动画
+  const oldCount = parseInt(countEl.textContent) || 0;
+  const newCount = accounts.length;
+  countEl.textContent = newCount;
+  if (newCount !== oldCount) {
+    countEl.classList.add('badge-pulse');
+    setTimeout(() => countEl.classList.remove('badge-pulse'), 600);
+  }
 
   if (accounts.length === 0) {
-    listEl.innerHTML = '';
-    listEl.appendChild(emptyEl);
-    emptyEl.style.display = 'flex';
+    listEl.innerHTML = `
+      <div class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+          <rect x="2" y="4" width="20" height="16" rx="2"/>
+          <path d="M22 7L12 13L2 7"/>
+        </svg>
+        <p>暂无邮箱</p>
+        <p class="text-muted">点击上方按钮导入</p>
+      </div>
+    `;
+    // 隐藏批量删除按钮
+    updateBulkDeleteButton(0);
     return;
   }
 
-  emptyEl.style.display = 'none';
-
-  // 全选容器
+  // 全选容器 + 批量删除按钮
   let html = `
     <div class="select-all-wrapper">
       <input type="checkbox" class="account-checkbox" id="selectAll" />
       <label for="selectAll" style="cursor:pointer;">全选</label>
+      <button class="btn btn-ghost btn-small btn-danger-ghost" id="btnDeleteSelected" style="display:none;margin-left:auto;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+        </svg>
+        删除选中
+      </button>
     </div>
   `;
 
-  accounts.forEach(acc => {
+  accounts.forEach((acc, index) => {
+    const isNew = highlightIds && highlightIds.has(acc.id);
     html += `
-      <div class="account-item" data-id="${acc.id}">
+      <div class="account-item ${isNew ? 'account-item-new' : ''}" data-id="${acc.id}" style="animation-delay: ${isNew ? index * 0.05 : 0}s">
         <input type="checkbox" class="account-checkbox account-check" data-id="${acc.id}" />
         <span class="account-email" title="${acc.email}">${acc.email}</span>
-        <button class="account-delete" onclick="deleteAccount('${acc.id}')" title="删除">
+        <button class="account-delete" onclick="event.stopPropagation(); deleteAccount('${acc.id}')" title="删除">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
@@ -165,6 +189,15 @@ function renderAccountList() {
 
   listEl.innerHTML = html;
 
+  // 清除新导入高亮（3秒后移除动画类）
+  if (highlightIds && highlightIds.size > 0) {
+    setTimeout(() => {
+      document.querySelectorAll('.account-item-new').forEach(el => {
+        el.classList.remove('account-item-new');
+      });
+    }, 3000);
+  }
+
   // 全选事件
   const selectAllEl = document.getElementById('selectAll');
   if (selectAllEl) {
@@ -173,31 +206,125 @@ function renderAccountList() {
         cb.checked = e.target.checked;
         cb.closest('.account-item')?.classList.toggle('selected', e.target.checked);
       });
+      updateBulkDeleteButton();
     });
   }
 
-  // 单个选中事件
-  document.querySelectorAll('.account-check').forEach(cb => {
-    cb.addEventListener('change', (e) => {
-      e.target.closest('.account-item')?.classList.toggle('selected', e.target.checked);
-      // 更新全选状态
-      const all = document.querySelectorAll('.account-check');
-      const checked = document.querySelectorAll('.account-check:checked');
-      if (selectAllEl) {
-        selectAllEl.checked = all.length === checked.length;
+  // 单个选中事件（同时支持点击行来切换选中）
+  document.querySelectorAll('.account-item').forEach(item => {
+    // 点击行切换选中
+    item.addEventListener('click', (e) => {
+      // 如果点击的是 checkbox 或删除按钮，不处理
+      if (e.target.closest('.account-checkbox') || e.target.closest('.account-delete')) return;
+      const cb = item.querySelector('.account-check');
+      if (cb) {
+        cb.checked = !cb.checked;
+        item.classList.toggle('selected', cb.checked);
+        updateSelectAllState();
+        updateBulkDeleteButton();
       }
     });
   });
+
+  document.querySelectorAll('.account-check').forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      e.target.closest('.account-item')?.classList.toggle('selected', e.target.checked);
+      updateSelectAllState();
+      updateBulkDeleteButton();
+    });
+  });
+
+  // 批量删除按钮事件
+  const btnDeleteSelected = document.getElementById('btnDeleteSelected');
+  if (btnDeleteSelected) {
+    btnDeleteSelected.addEventListener('click', deleteSelectedAccounts);
+  }
 }
 
 /**
- * 删除单个账号
+ * 更新全选复选框状态
+ */
+function updateSelectAllState() {
+  const selectAllEl = document.getElementById('selectAll');
+  if (!selectAllEl) return;
+  const all = document.querySelectorAll('.account-check');
+  const checked = document.querySelectorAll('.account-check:checked');
+  selectAllEl.checked = all.length > 0 && all.length === checked.length;
+  selectAllEl.indeterminate = checked.length > 0 && checked.length < all.length;
+}
+
+/**
+ * 更新批量删除按钮显隐
+ */
+function updateBulkDeleteButton(count) {
+  const btn = document.getElementById('btnDeleteSelected');
+  if (!btn) return;
+  if (count === undefined) {
+    count = document.querySelectorAll('.account-check:checked').length;
+  }
+  if (count > 0) {
+    btn.style.display = 'inline-flex';
+    btn.textContent = '';
+    btn.innerHTML = `
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+      </svg>
+      删除选中 (${count})
+    `;
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+/**
+ * 删除选中的账号
+ */
+function deleteSelectedAccounts() {
+  const checkedIds = [];
+  document.querySelectorAll('.account-check:checked').forEach(cb => {
+    checkedIds.push(cb.dataset.id);
+  });
+
+  if (checkedIds.length === 0) {
+    showToast('请先选择要删除的邮箱', 'warning');
+    return;
+  }
+
+  if (!confirm(`确定要删除选中的 ${checkedIds.length} 个邮箱吗？`)) return;
+
+  // 播放移除动画
+  checkedIds.forEach(id => {
+    const item = document.querySelector(`.account-item[data-id="${id}"]`);
+    if (item) {
+      item.classList.add('account-item-removing');
+    }
+  });
+
+  // 等动画结束后再真正删除
+  setTimeout(() => {
+    const accounts = getAccounts().filter(a => !checkedIds.includes(a.id));
+    saveAccounts(accounts);
+    renderAccountList();
+    showToast(`已删除 ${checkedIds.length} 个邮箱`, 'success');
+  }, 300);
+}
+
+/**
+ * 删除单个账号（带动画）
  */
 function deleteAccount(id) {
-  const accounts = getAccounts().filter(a => a.id !== id);
-  saveAccounts(accounts);
-  renderAccountList();
-  showToast('已删除邮箱', 'info');
+  const item = document.querySelector(`.account-item[data-id="${id}"]`);
+  if (item) {
+    item.classList.add('account-item-removing');
+  }
+
+  // 等动画结束后再真正删除
+  setTimeout(() => {
+    const accounts = getAccounts().filter(a => a.id !== id);
+    saveAccounts(accounts);
+    renderAccountList();
+    showToast('已删除邮箱', 'info');
+  }, 300);
 }
 
 /**
@@ -570,7 +697,7 @@ function escapeAttr(str) {
 }
 
 /**
- * Toast 通知
+ * Toast 通知（支持成功大横幅模式）
  */
 function showToast(message, type = 'info', duration = 3500) {
   const container = document.getElementById('toastContainer');
@@ -587,10 +714,53 @@ function showToast(message, type = 'info', duration = 3500) {
   toast.innerHTML = `<span>${icons[type] || ''}</span><span>${escapeHtml(message)}</span>`;
   container.appendChild(toast);
 
+  // 点击 toast 提前关闭
+  toast.addEventListener('click', () => {
+    toast.classList.add('toast-exit');
+    setTimeout(() => toast.remove(), 300);
+  });
+  toast.style.cursor = 'pointer';
+
   setTimeout(() => {
     toast.classList.add('toast-exit');
     setTimeout(() => toast.remove(), 300);
   }, duration);
+}
+
+/**
+ * 显示导入成功大横幅
+ */
+function showImportSuccessBanner(uniqueCount, duplicateCount) {
+  const banner = document.createElement('div');
+  banner.className = 'import-success-banner';
+  
+  let msg = `🎉 成功导入 <strong>${uniqueCount}</strong> 个邮箱`;
+  if (duplicateCount > 0) {
+    msg += `，跳过 <strong>${duplicateCount}</strong> 个重复`;
+  }
+
+  banner.innerHTML = `
+    <div class="import-success-icon">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+        <polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+    </div>
+    <div class="import-success-text">${msg}</div>
+  `;
+
+  document.body.appendChild(banner);
+
+  // 触发动画
+  requestAnimationFrame(() => {
+    banner.classList.add('active');
+  });
+
+  // 3秒后移除
+  setTimeout(() => {
+    banner.classList.add('exit');
+    setTimeout(() => banner.remove(), 400);
+  }, 2500);
 }
 
 /**
@@ -615,6 +785,31 @@ function updateProgress(percent, text) {
   document.getElementById('progressPercent').textContent = `${percent}%`;
 }
 
+/**
+ * Textarea 输入验证震动效果
+ */
+function shakeElement(el) {
+  el.classList.add('shake');
+  setTimeout(() => el.classList.remove('shake'), 500);
+}
+
+/**
+ * 按钮加载状态
+ */
+function setButtonLoading(btn, loading, originalText = '') {
+  if (loading) {
+    btn.dataset.originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `
+      <span class="btn-spinner"></span>
+      处理中...
+    `;
+  } else {
+    btn.disabled = false;
+    btn.innerHTML = btn.dataset.originalHtml || originalText;
+  }
+}
+
 // ==================== 事件绑定 ====================
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -624,10 +819,15 @@ document.addEventListener('DOMContentLoaded', () => {
   // 导入弹窗
   const importModal = document.getElementById('importModal');
   const emailDetailModal = document.getElementById('emailDetailModal');
+  const importTextarea = document.getElementById('importTextarea');
+  const btnConfirmImport = document.getElementById('btnConfirmImport');
 
   document.getElementById('btnOpenImport').addEventListener('click', () => {
     importModal.classList.add('active');
-    document.getElementById('importTextarea').focus();
+    importTextarea.focus();
+    // 重置 textarea 状态
+    importTextarea.classList.remove('textarea-error');
+    updateImportPreview();
   });
 
   document.getElementById('btnCloseModal').addEventListener('click', () => {
@@ -651,40 +851,82 @@ document.addEventListener('DOMContentLoaded', () => {
     emailDetailModal.classList.remove('active');
   });
 
+  // 实时预览导入数据
+  importTextarea.addEventListener('input', () => {
+    importTextarea.classList.remove('textarea-error');
+    updateImportPreview();
+  });
+
   // 确认导入
-  document.getElementById('btnConfirmImport').addEventListener('click', () => {
-    const text = document.getElementById('importTextarea').value;
+  btnConfirmImport.addEventListener('click', () => {
+    const text = importTextarea.value;
     if (!text.trim()) {
       showToast('请输入邮箱信息', 'warning');
+      importTextarea.classList.add('textarea-error');
+      shakeElement(importTextarea);
+      importTextarea.focus();
       return;
     }
 
-    const { accounts: newAccounts, errors } = parseImportText(text);
+    // 按钮加载状态
+    setButtonLoading(btnConfirmImport, true);
 
-    if (errors.length > 0) {
-      errors.forEach(err => showToast(err, 'error', 5000));
-    }
+    // 模拟微小延迟让用户感知处理过程
+    setTimeout(() => {
+      const { accounts: newAccounts, errors } = parseImportText(text);
 
-    if (newAccounts.length > 0) {
-      const existing = getAccounts();
-      // 去重（基于邮箱地址）
-      const existingEmails = new Set(existing.map(a => a.email.toLowerCase()));
-      const unique = newAccounts.filter(a => !existingEmails.has(a.email.toLowerCase()));
-      const duplicates = newAccounts.length - unique.length;
+      if (errors.length > 0) {
+        errors.forEach(err => showToast(err, 'error', 5000));
+      }
 
-      saveAccounts([...existing, ...unique]);
-      renderAccountList();
+      if (newAccounts.length > 0) {
+        const existing = getAccounts();
+        // 去重（基于邮箱地址）
+        const existingEmails = new Set(existing.map(a => a.email.toLowerCase()));
+        const unique = newAccounts.filter(a => !existingEmails.has(a.email.toLowerCase()));
+        const duplicates = newAccounts.length - unique.length;
 
-      showToast(
-        `成功导入 ${unique.length} 个邮箱${duplicates > 0 ? `，跳过 ${duplicates} 个重复` : ''}`,
-        'success'
-      );
+        if (unique.length === 0 && duplicates > 0) {
+          // 全部重复
+          setButtonLoading(btnConfirmImport, false);
+          showToast(`所有 ${duplicates} 个邮箱都已存在，跳过导入`, 'warning');
+          return;
+        }
 
-      document.getElementById('importTextarea').value = '';
-      importModal.classList.remove('active');
-    } else if (errors.length === 0) {
-      showToast('未解析到有效的邮箱数据', 'warning');
-    }
+        saveAccounts([...existing, ...unique]);
+        
+        // 记录新导入的ID用于高亮
+        const newIds = new Set(unique.map(a => a.id));
+        renderAccountList(newIds);
+
+        // 清空输入
+        importTextarea.value = '';
+        updateImportPreview();
+
+        // 关闭弹窗
+        importModal.classList.remove('active');
+        
+        // 恢复按钮
+        setButtonLoading(btnConfirmImport, false);
+
+        // 显示成功横幅
+        showImportSuccessBanner(unique.length, duplicates);
+
+        // 滚动账号列表到底部以显示新导入的账号
+        setTimeout(() => {
+          const accountList = document.getElementById('accountList');
+          accountList.scrollTop = accountList.scrollHeight;
+        }, 100);
+
+      } else if (errors.length === 0) {
+        setButtonLoading(btnConfirmImport, false);
+        showToast('未解析到有效的邮箱数据', 'warning');
+        importTextarea.classList.add('textarea-error');
+        shakeElement(importTextarea);
+      } else {
+        setButtonLoading(btnConfirmImport, false);
+      }
+    }, 200);
   });
 
   // 清空全部
@@ -695,9 +937,15 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     if (confirm(`确定要清空全部 ${accounts.length} 个邮箱吗？`)) {
-      saveAccounts([]);
-      renderAccountList();
-      showToast('已清空全部邮箱', 'info');
+      // 播放移除动画
+      document.querySelectorAll('.account-item').forEach(item => {
+        item.classList.add('account-item-removing');
+      });
+      setTimeout(() => {
+        saveAccounts([]);
+        renderAccountList();
+        showToast('已清空全部邮箱', 'info');
+      }, 300);
     }
   });
 
@@ -706,6 +954,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const selected = getSelectedAccounts();
     if (selected.length === 0) {
       showToast('请先在左侧勾选要取件的邮箱', 'warning');
+      // 闪烁左侧面板提示
+      const sidebar = document.querySelector('.sidebar');
+      sidebar.classList.add('sidebar-highlight');
+      setTimeout(() => sidebar.classList.remove('sidebar-highlight'), 1500);
       return;
     }
     startFetch(selected);
@@ -721,6 +973,14 @@ document.addEventListener('DOMContentLoaded', () => {
     startFetch(accounts);
   });
 
+  // Ctrl+Enter 快捷键提交导入
+  importTextarea.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      btnConfirmImport.click();
+    }
+  });
+
   // ESC 关闭弹窗
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -729,6 +989,53 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+/**
+ * 更新导入预览：实时显示解析了多少行
+ */
+function updateImportPreview() {
+  const textarea = document.getElementById('importTextarea');
+  let previewEl = document.getElementById('importPreview');
+  
+  if (!previewEl) {
+    previewEl = document.createElement('div');
+    previewEl.id = 'importPreview';
+    previewEl.className = 'import-preview';
+    textarea.parentElement.appendChild(previewEl);
+  }
+
+  const text = textarea.value.trim();
+  if (!text) {
+    previewEl.innerHTML = '<span class="preview-hint">💡 粘贴邮箱数据后将自动预览，支持 Ctrl+Enter 快捷导入</span>';
+    return;
+  }
+
+  const lines = text.split('\n').filter(l => l.trim());
+  const { accounts, errors } = parseImportText(text);
+  
+  // 检查与现有邮箱的重复
+  const existing = getAccounts();
+  const existingEmails = new Set(existing.map(a => a.email.toLowerCase()));
+  const duplicates = accounts.filter(a => existingEmails.has(a.email.toLowerCase()));
+  const unique = accounts.length - duplicates.length;
+
+  let html = `<span class="preview-count">📋 识别 ${lines.length} 行`;
+  
+  if (accounts.length > 0) {
+    html += ` → <span class="preview-valid">✅ ${accounts.length} 个有效</span>`;
+  }
+  
+  if (unique < accounts.length && duplicates.length > 0) {
+    html += ` <span class="preview-dup">⚠️ ${duplicates.length} 个重复</span>`;
+  }
+  
+  if (errors.length > 0) {
+    html += ` <span class="preview-error">❌ ${errors.length} 个错误</span>`;
+  }
+  
+  html += '</span>';
+  previewEl.innerHTML = html;
+}
 
 /**
  * 启动取件流程

@@ -970,12 +970,264 @@ body {
   color: var(--text-muted);
 }
 
+/* --- Badge 脉冲动画 --- */
+.badge-pulse {
+  animation: badgePulse 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes badgePulse {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.3); background: var(--accent); color: white; }
+  100% { transform: scale(1); }
+}
+
+/* --- 新导入账号高亮动画 --- */
+.account-item-new {
+  animation: accountSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards,
+             accountHighlight 2s ease 0.4s forwards;
+}
+
+@keyframes accountSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes accountHighlight {
+  0% {
+    background: rgba(37, 99, 235, 0.15);
+    border-color: rgba(37, 99, 235, 0.3);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+  }
+  100% {
+    background: rgba(255, 255, 255, 0.35);
+    border-color: transparent;
+    box-shadow: none;
+  }
+}
+
+/* --- 账号删除动画 --- */
+.account-item-removing {
+  animation: accountSlideOut 0.3s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes accountSlideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    max-height: 50px;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(30px) scale(0.9);
+    max-height: 0;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    overflow: hidden;
+  }
+}
+
+/* --- 批量删除按钮 --- */
+.btn-danger-ghost {
+  color: var(--error) !important;
+  border-color: rgba(239, 68, 68, 0.15) !important;
+}
+
+.btn-danger-ghost:hover {
+  background: var(--error-bg) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+/* --- 按钮加载 Spinner --- */
+.btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* --- Textarea 错误状态 --- */
+.textarea-error {
+  border-color: var(--error) !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+}
+
+/* --- 震动动画 --- */
+.shake {
+  animation: shakeAnim 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+@keyframes shakeAnim {
+  0%, 100% { transform: translateX(0); }
+  10% { transform: translateX(-6px); }
+  20% { transform: translateX(5px); }
+  30% { transform: translateX(-4px); }
+  40% { transform: translateX(3px); }
+  50% { transform: translateX(-2px); }
+  60% { transform: translateX(1px); }
+}
+
+/* --- 导入预览 --- */
+.import-preview {
+  padding: 8px 12px;
+  margin-top: 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  transition: var(--transition-fast);
+}
+
+.preview-hint {
+  color: var(--text-muted);
+}
+
+.preview-count {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.preview-valid {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.preview-dup {
+  color: var(--warning);
+  font-weight: 500;
+}
+
+.preview-error {
+  color: var(--error);
+  font-weight: 500;
+}
+
+/* --- 导入成功大横幅 --- */
+.import-success-banner {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.8);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(32px) saturate(1.5);
+  -webkit-backdrop-filter: blur(32px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 24px;
+  padding: 36px 48px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.8);
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  opacity: 0;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+
+.import-success-banner.active {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.import-success-banner.exit {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.9);
+}
+
+.import-success-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10b981, #059669);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
+  animation: successPop 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
+}
+
+@keyframes successPop {
+  0% { transform: scale(0); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+.import-success-text {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.import-success-text strong {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* --- 侧边栏高亮提示 --- */
+.sidebar-highlight {
+  animation: sidebarFlash 1.5s ease;
+}
+
+@keyframes sidebarFlash {
+  0%, 100% { border-color: var(--glass-border); box-shadow: var(--shadow-md); }
+  25% { border-color: rgba(37, 99, 235, 0.4); box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1), var(--shadow-md); }
+  50% { border-color: rgba(37, 99, 235, 0.3); box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.08), var(--shadow-md); }
+  75% { border-color: rgba(37, 99, 235, 0.2); box-shadow: var(--shadow-md); }
+}
+
+/* --- 不确定 checkbox 状态 --- */
+.account-checkbox:indeterminate {
+  background: var(--accent-lighter);
+  border-color: var(--accent);
+}
+
+.account-checkbox:indeterminate::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 3px;
+  width: 8px;
+  height: 2px;
+  background: white;
+  border-radius: 1px;
+}
+
+/* --- Toast 点击关闭光标 --- */
+.toast {
+  cursor: pointer;
+  user-select: none;
+}
+
+.toast:hover {
+  filter: brightness(0.97);
+}
+
 /* --- 响应式 --- */
 @media (max-width: 900px) {
   .main-layout { flex-direction: column; }
   .sidebar { width: 100%; min-width: unset; max-height: 300px; }
   .control-row { flex-wrap: wrap; }
   .input-narrow { width: 100%; min-width: unset; }
+  .import-success-banner { padding: 24px 32px; }
 }
 
 @media (max-width: 600px) {
@@ -984,4 +1236,5 @@ body {
   .control-actions { flex-direction: column; gap: 10px; }
   .action-buttons { width: 100%; }
   .action-buttons .btn { flex: 1; }
+  .import-success-banner { padding: 20px 24px; min-width: 260px; }
 }
