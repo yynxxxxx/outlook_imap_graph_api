@@ -7,6 +7,7 @@
 
 const { refreshAccessToken } = require('./lib/token-helper');
 const { fetchEmailsViaGraph } = require('./lib/graph-helper');
+const { toPublicError } = require('./lib/error-helper');
 
 module.exports = async function handler(req, res) {
   // CORS 预检请求
@@ -50,10 +51,12 @@ module.exports = async function handler(req, res) {
     });
   } catch (err) {
     console.error('Graph 取件错误:', err);
+    const publicError = toPublicError(err, 'graph');
     return res.status(200).json({
       success: false,
       protocol: 'graph',
-      error: err.message || 'Graph API 取件失败',
+      error: publicError.message,
+      detail: publicError.detail,
       emails: [],
     });
   }

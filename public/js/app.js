@@ -9,6 +9,7 @@
 
 // ==================== 全局状态 ====================
 const STORAGE_KEY = 'outlook_accounts';
+const EXPORT_SEPARATOR = '----';
 
 // 追踪新导入的账号ID，用于高亮动画
 let _newlyAddedIds = new Set();
@@ -177,7 +178,13 @@ function renderAccountList(highlightIds = null) {
     html += `
       <div class="account-item ${isNew ? 'account-item-new' : ''}" data-id="${acc.id}" style="animation-delay: ${isNew ? index * 0.05 : 0}s">
         <input type="checkbox" class="account-checkbox account-check" data-id="${acc.id}" />
-        <span class="account-email" title="${acc.email}">${acc.email}</span>
+        <span class="account-email" title="${escapeAttr(acc.email)}">${escapeHtml(acc.email)}</span>
+        <button class="account-copy" data-email="${escapeAttr(acc.email)}" title="复制邮箱">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        </button>
         <button class="account-delete" onclick="event.stopPropagation(); deleteAccount('${acc.id}')" title="删除">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -215,7 +222,7 @@ function renderAccountList(highlightIds = null) {
     // 点击行切换选中
     item.addEventListener('click', (e) => {
       // 如果点击的是 checkbox 或删除按钮，不处理
-      if (e.target.closest('.account-checkbox') || e.target.closest('.account-delete')) return;
+      if (e.target.closest('.account-checkbox') || e.target.closest('.account-delete') || e.target.closest('.account-copy')) return;
       const cb = item.querySelector('.account-check');
       if (cb) {
         cb.checked = !cb.checked;
@@ -239,6 +246,13 @@ function renderAccountList(highlightIds = null) {
   if (btnDeleteSelected) {
     btnDeleteSelected.addEventListener('click', deleteSelectedAccounts);
   }
+
+  document.querySelectorAll('.account-copy').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      copyText(btn.dataset.email || '', '邮箱已复制');
+    });
+  });
 }
 
 /**
@@ -339,6 +353,45 @@ function getSelectedAccounts() {
   return accounts.filter(a => checkedIds.includes(a.id));
 }
 
+/**
+ * 导出账号，优先导出已选邮箱；未选择时导出全部
+ */
+function exportAccounts() {
+  const selected = getSelectedAccounts();
+  const accounts = selected.length > 0 ? selected : getAccounts();
+
+  if (accounts.length === 0) {
+    showToast('没有可导出的邮箱', 'warning');
+    return;
+  }
+
+  const content = accounts.map(formatAccountForExport).join('\n');
+  const filename = `outlook-accounts-${new Date().toISOString().slice(0, 10)}.txt`;
+  downloadTextFile(filename, content);
+  copyText(content, selected.length > 0 ? `已导出并复制选中的 ${accounts.length} 个邮箱` : `已导出并复制全部 ${accounts.length} 个邮箱`, false);
+}
+
+function formatAccountForExport(account) {
+  return [
+    account.email || '',
+    account.password || '',
+    account.clientId || '',
+    account.refreshToken || '',
+  ].join(EXPORT_SEPARATOR);
+}
+
+function downloadTextFile(filename, content) {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ==================== 邮件取件 ====================
 
 /**
@@ -374,7 +427,9 @@ async function fetchEmails(accounts, options = {}) {
   showSkeletonCards(3);
 
   const allEmails = [];
-  const errors = [];
+  const fatalErrors = [];
+  let successfulAccounts = 0;
+  renderFetchIssues([]);
 
   for (let i = 0; i < accounts.length; i++) {
     const account = accounts[i];
@@ -401,12 +456,16 @@ async function fetchEmails(accounts, options = {}) {
             return result;
           } catch (err) {
             completedSteps++;
-            errors.push({ email: account.email, protocol: 'graph', error: err.message });
             updateProgress(
               Math.round((completedSteps / totalSteps) * 95),
               `${accountLabel} — Graph ❌`
             );
-            return { success: false, emails: [], protocol: 'graph' };
+            return {
+              success: false,
+              emails: [],
+              protocol: 'graph',
+              _error: normalizeFetchError(account.email, 'graph', err),
+            };
           }
         })()
       );
@@ -429,18 +488,29 @@ async function fetchEmails(accounts, options = {}) {
             return result;
           } catch (err) {
             completedSteps++;
-            errors.push({ email: account.email, protocol: 'imap', error: err.message });
             updateProgress(
               Math.round((completedSteps / totalSteps) * 95),
               `${accountLabel} — IMAP ❌`
             );
-            return { success: false, emails: [], protocol: 'imap' };
+            return {
+              success: false,
+              emails: [],
+              protocol: 'imap',
+              _error: normalizeFetchError(account.email, 'imap', err),
+            };
           }
         })()
       );
     }
 
     const results = await Promise.all(promises);
+    const accountSucceeded = results.some(result => result.success === true);
+
+    if (accountSucceeded) {
+      successfulAccounts++;
+    } else {
+      fatalErrors.push(...results.map(result => result._error).filter(Boolean));
+    }
 
     // 收集邮件并标记来源账号
     results.forEach(result => {
@@ -461,6 +531,7 @@ async function fetchEmails(accounts, options = {}) {
   // 渲染结果
   updateProgress(100, '取件完成 ✅');
   renderEmailList(merged);
+  renderFetchIssues(fatalErrors);
 
   const imapCount = merged.filter(e => e.protocol === 'imap').length;
   const graphCount = merged.filter(e => e.protocol === 'graph').length;
@@ -468,11 +539,10 @@ async function fetchEmails(accounts, options = {}) {
   // 延迟隐藏进度条让用户看到完成状态
   setTimeout(() => showProgress(false), 2000);
 
-  if (errors.length > 0) {
-    setStatus('error', `完成 (${errors.length} 个错误)`);
-    errors.forEach(err => {
-      showToast(`${err.email} [${err.protocol}]: ${err.error}`, 'error', 5000);
-    });
+  if (fatalErrors.length > 0) {
+    const failedAccounts = accounts.length - successfulAccounts;
+    setStatus(successfulAccounts > 0 ? 'ready' : 'error', `完成：${successfulAccounts} 成功 / ${failedAccounts} 失败`);
+    showToast(`取件完成，但有 ${failedAccounts} 个邮箱所有协议都失败，详情已整理在结果区`, successfulAccounts > 0 ? 'warning' : 'error', 5000);
   } else {
     setStatus('ready', '就绪');
   }
@@ -509,9 +579,11 @@ async function fetchViaGraph(account, options) {
     }),
   });
 
-  const data = await response.json();
+  const data = await parseApiResponse(response);
   if (!data.success) {
-    throw new Error(data.error || 'Graph API 取件失败');
+    const err = new Error(data.error || data.message || 'Graph API 取件失败');
+    err.detail = data.detail;
+    throw err;
   }
   return data;
 }
@@ -533,11 +605,55 @@ async function fetchViaIMAP(account, options) {
     }),
   });
 
-  const data = await response.json();
+  const data = await parseApiResponse(response);
   if (!data.success) {
-    throw new Error(data.error || 'IMAP 取件失败');
+    const err = new Error(data.error || data.message || 'IMAP 取件失败');
+    err.detail = data.detail;
+    throw err;
   }
   return data;
+}
+
+async function parseApiResponse(response) {
+  const text = await response.text();
+  let data = {};
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { success: false, error: text || `HTTP ${response.status}` };
+  }
+
+  if (!response.ok && data.success !== false) {
+    data.success = false;
+    data.error = data.error || `HTTP ${response.status}`;
+  }
+
+  return data;
+}
+
+function normalizeFetchError(email, protocol, err) {
+  const raw = err?.message || String(err || '未知错误');
+  return {
+    email,
+    protocol,
+    error: simplifyErrorMessage(raw),
+    raw: err?.detail || raw,
+  };
+}
+
+function simplifyErrorMessage(message) {
+  const text = String(message || '').replace(/\s+/g, ' ').trim();
+
+  if (/invalid_grant/i.test(text)) return '刷新令牌无效或已过期，请重新获取 refresh_token';
+  if (/invalid_client/i.test(text)) return 'client_id 无效，请检查导入的 clientid';
+  if (/interaction_required|consent_required/i.test(text)) return '账号需要重新授权或补充权限';
+  if (/AUTHENTICATE|Authentication failed|Invalid credentials/i.test(text)) return 'IMAP 认证失败，请检查账号权限和令牌 scope';
+  if (/timeout|ETIMEDOUT|ESOCKETTIMEDOUT/i.test(text)) return '连接超时，请稍后重试或降低取件数量';
+  if (/Failed to fetch|NetworkError/i.test(text)) return '网络请求失败，请检查服务器网络';
+  if (/Graph API 错误: ErrorInvalidUser|MailboxNotEnabledForRESTAPI/i.test(text)) return 'Graph 无法访问该邮箱，请检查账号类型或权限';
+
+  return text.length > 180 ? `${text.slice(0, 180)}...` : text;
 }
 
 /**
@@ -620,6 +736,47 @@ function renderEmailList(emails) {
   window._currentEmails = emails;
 }
 
+function renderFetchIssues(errors) {
+  const issuesEl = document.getElementById('fetchIssues');
+  if (!issuesEl) return;
+
+  if (!errors || errors.length === 0) {
+    issuesEl.style.display = 'none';
+    issuesEl.innerHTML = '';
+    return;
+  }
+
+  const grouped = errors.reduce((acc, err) => {
+    const key = err.protocol;
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
+  const summary = Object.entries(grouped)
+    .map(([protocol, count]) => `${protocol.toUpperCase()} ${count} 个`)
+    .join(' / ');
+
+  issuesEl.style.display = 'block';
+  issuesEl.innerHTML = `
+    <div class="fetch-issues-title">
+      <span>部分协议取件失败</span>
+      <span class="fetch-issues-count">${summary}</span>
+    </div>
+    <div class="fetch-issues-list">
+      ${errors.map(err => `
+        <details class="fetch-issue-item">
+          <summary>
+            <span class="email-protocol ${err.protocol}">${escapeHtml(err.protocol)}</span>
+            <span class="fetch-issue-email">${escapeHtml(err.email)}</span>
+            <span class="fetch-issue-message">${escapeHtml(err.error)}</span>
+          </summary>
+          <pre>${escapeHtml(err.raw || err.error)}</pre>
+        </details>
+      `).join('')}
+    </div>
+  `;
+}
+
 /**
  * 显示邮件详情
  */
@@ -685,7 +842,7 @@ function formatDate(dateStr, full = false) {
 function escapeHtml(str) {
   if (!str) return '';
   const div = document.createElement('div');
-  div.textContent = str;
+  div.textContent = String(str);
   return div.innerHTML;
 }
 
@@ -693,7 +850,36 @@ function escapeHtml(str) {
  * 属性值转义
  */
 function escapeAttr(str) {
-  return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+async function copyText(text, successMessage = '已复制', showOnFailure = true) {
+  if (!text) {
+    if (showOnFailure) showToast('没有可复制的内容', 'warning');
+    return false;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(successMessage, 'success', 1800);
+    return true;
+  } catch {
+    const input = document.createElement('textarea');
+    input.value = text;
+    input.style.position = 'fixed';
+    input.style.left = '-9999px';
+    document.body.appendChild(input);
+    input.focus();
+    input.select();
+    const ok = document.execCommand('copy');
+    input.remove();
+    if (ok) {
+      showToast(successMessage, 'success', 1800);
+      return true;
+    }
+    if (showOnFailure) showToast('复制失败，请手动复制', 'error');
+    return false;
+  }
 }
 
 /**
@@ -948,6 +1134,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }, 300);
     }
   });
+
+  document.getElementById('btnExportAccounts').addEventListener('click', exportAccounts);
 
   // 选中取件
   document.getElementById('btnFetchSelected').addEventListener('click', () => {
