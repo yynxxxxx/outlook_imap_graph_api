@@ -7,6 +7,7 @@
 
 const { refreshAccessToken } = require('./lib/token-helper');
 const { fetchEmailsViaIMAP } = require('./lib/imap-helper');
+const { toPublicError } = require('./lib/error-helper');
 
 module.exports = async function handler(req, res) {
   // CORS 预检请求
@@ -51,10 +52,12 @@ module.exports = async function handler(req, res) {
     });
   } catch (err) {
     console.error('IMAP 取件错误:', err);
+    const publicError = toPublicError(err, 'imap');
     return res.status(200).json({
       success: false,
       protocol: 'imap',
-      error: err.message || 'IMAP 取件失败',
+      error: publicError.message,
+      detail: publicError.detail,
       emails: [],
     });
   }

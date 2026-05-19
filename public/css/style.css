@@ -133,7 +133,7 @@ body {
 .app-container {
   position: relative;
   z-index: 1;
-  max-width: 1440px;
+  max-width: 1680px;
   margin: 0 auto;
   padding: 20px;
   min-height: 100vh;
@@ -233,8 +233,8 @@ body {
 
 /* --- 左侧面板 --- */
 .sidebar {
-  width: 280px;
-  min-width: 280px;
+  width: 360px;
+  min-width: 360px;
   display: flex;
   flex-direction: column;
   padding: 16px;
@@ -341,6 +341,12 @@ body {
 }
 
 /* --- 邮箱列表 --- */
+.import-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .account-list {
   flex: 1;
   overflow-y: auto;
@@ -361,7 +367,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 11px;
+  padding: 10px 12px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.35);
   border: 1px solid transparent;
@@ -407,12 +413,15 @@ body {
 }
 
 .account-email {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: var(--text-primary);
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.35;
 }
 
 .account-delete {
@@ -425,6 +434,33 @@ body {
   border-radius: 4px;
   transition: var(--transition-fast);
   flex-shrink: 0;
+}
+
+.account-copy {
+  opacity: 0;
+  width: 24px;
+  height: 24px;
+  background: rgba(37, 99, 235, 0.06);
+  border: 1px solid rgba(37, 99, 235, 0.08);
+  color: var(--accent);
+  cursor: pointer;
+  border-radius: 7px;
+  transition: var(--transition-fast);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.account-item:hover .account-copy,
+.account-item:focus-within .account-copy {
+  opacity: 0.72;
+}
+
+.account-copy:hover {
+  opacity: 1 !important;
+  background: rgba(37, 99, 235, 0.12);
+  border-color: rgba(37, 99, 235, 0.18);
 }
 
 .account-item:hover .account-delete { opacity: 0.5; }
@@ -627,6 +663,89 @@ body {
 }
 
 .results-meta { display: flex; gap: 8px; }
+
+/* --- 取件错误摘要 --- */
+.fetch-issues {
+  margin: 2px 0 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.18);
+  color: var(--text-secondary);
+}
+
+.fetch-issues-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #92400e;
+  margin-bottom: 8px;
+}
+
+.fetch-issues-count {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--warning);
+}
+
+.fetch-issues-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fetch-issue-item {
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  overflow: hidden;
+}
+
+.fetch-issue-item summary {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 220px) 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.76rem;
+}
+
+.fetch-issue-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.fetch-issue-email,
+.fetch-issue-message {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fetch-issue-email {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.fetch-issue-message {
+  color: var(--text-secondary);
+}
+
+.fetch-issue-item pre {
+  margin: 0;
+  padding: 10px;
+  border-top: 1px solid rgba(0, 0, 0, 0.04);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--text-secondary);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.7rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 /* --- 邮件列表 --- */
 .email-list {
