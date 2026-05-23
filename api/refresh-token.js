@@ -8,6 +8,7 @@
 
 const { refreshAccessToken } = require('./lib/token-helper');
 const { toPublicError } = require('./lib/error-helper');
+const { unwrapSecureBody } = require('./lib/security-helper');
 
 module.exports = async function handler(req, res) {
   // CORS 预检请求
@@ -20,6 +21,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    req.body = await unwrapSecureBody(req.body);
     const { clientId, refreshToken } = req.body;
 
     if (!clientId || !refreshToken) {
@@ -35,6 +37,6 @@ module.exports = async function handler(req, res) {
   } catch (err) {
     console.error('Token 刷新错误:', err);
     const publicError = toPublicError(err, 'token');
-    return res.status(500).json({ error: publicError.message, detail: publicError.detail });
+    return res.status(err.statusCode || 500).json({ success: false, error: publicError.message, detail: publicError.detail });
   }
 };

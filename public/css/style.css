@@ -259,6 +259,42 @@ body {
 
 .panel-title svg { opacity: 0.5; }
 
+.account-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.account-search-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.account-search-input {
+  width: 100%;
+  padding: 9px 12px 9px 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.68);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.82rem;
+  outline: none;
+  transition: var(--transition-fast);
+}
+
+.account-search-input:focus {
+  border-color: var(--accent-light);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.account-search-input::placeholder {
+  color: var(--text-muted);
+}
+
 .badge {
   background: var(--accent-bg);
   color: var(--accent);

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=sidebar-wide-1">
+  <link rel="stylesheet" href="/css/style.css?v=mail-search-security-1">
 </head>
 <body>
   <!-- 动态背景 -->
@@ -54,6 +54,14 @@
             邮箱列表
           </h2>
           <span class="badge" id="accountCount">0</span>
+        </div>
+
+        <div class="account-search">
+          <svg class="account-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <input type="text" id="accountSearch" class="account-search-input" placeholder="搜索邮箱" autocomplete="off" />
         </div>
 
         <!-- 导入区域 -->
@@ -250,6 +258,6 @@
   <!-- Toast 通知 -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/js/app.js"></script>
+  <script src="/js/app.js?v=mail-search-security-1"></script>
 </body>
 </html>

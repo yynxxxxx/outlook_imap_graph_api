@@ -8,6 +8,9 @@
     },
     "api/refresh-token.js": {
       "maxDuration": 10
+    },
+    "api/security-session.js": {
+      "maxDuration": 10
     }
   },
   "rewrites": [
