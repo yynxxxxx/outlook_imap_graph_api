@@ -28,6 +28,7 @@ const MIME_TYPES = {
 };
 
 const apiHandlers = {
+  '/api/security-session': require('./api/security-session'),
   '/api/refresh-token': require('./api/refresh-token'),
   '/api/fetch-graph': require('./api/fetch-graph'),
   '/api/fetch-imap': require('./api/fetch-imap'),

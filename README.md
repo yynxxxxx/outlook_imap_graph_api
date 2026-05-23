@@ -54,8 +54,18 @@ server {
 | `HOST` | `0.0.0.0` | 监听地址 |
 | `CORS_ORIGIN` | `*` | API CORS 来源 |
 | `MAX_BODY_BYTES` | `1048576` | API JSON 请求体大小限制 |
+| `API_SECURITY_SECRET` | 随机生成 | 加密会话签名密钥，生产环境建议固定设置 |
+| `SECURITY_SESSION_TTL_MS` | `600000` | 安全会话有效期 |
+| `SECURITY_REQUEST_WINDOW_MS` | `120000` | 取件请求时间窗 |
+| `SECURITY_NONCE_TTL_MS` | `600000` | 防重放 nonce 记忆时间 |
 
 健康检查地址：`/healthz`
+
+生产环境建议设置一个固定密钥，重启服务后用户不容易遇到安全会话失效：
+
+```bash
+export API_SECURITY_SECRET="$(openssl rand -base64 32)"
+```
 
 ## Docker 运行
 

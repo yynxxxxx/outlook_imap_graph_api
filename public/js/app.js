@@ -10,16 +10,19 @@
 // ==================== 全局状态 ====================
 const STORAGE_KEY = 'outlook_accounts';
 const EXPORT_SEPARATOR = '----';
+const SECURITY_RETRY_LIMIT = 1;
 
 // 追踪新导入的账号ID，用于高亮动画
 let _newlyAddedIds = new Set();
+let _apiSecuritySession = null;
 
 /**
  * 获取所有已存储的账号
  */
 function getAccounts() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    const accounts = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    return normalizeAccountOrder(accounts);
   } catch {
     return [];
   }
@@ -29,7 +32,20 @@ function getAccounts() {
  * 保存账号列表
  */
 function saveAccounts(accounts) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeAccountOrder(accounts)));
+}
+
+function normalizeAccountOrder(accounts) {
+  if (!Array.isArray(accounts)) return [];
+  return accounts.map((account, index) => ({
+    ...account,
+    importIndex: Number.isFinite(account.importIndex) ? account.importIndex : index,
+  }));
+}
+
+function getAccountSearchKeyword() {
+  const input = document.getElementById('accountSearch');
+  return (input?.value || '').trim().toLowerCase();
 }
 
 // ==================== 解析导入 ====================
@@ -109,6 +125,7 @@ function parseImportText(text) {
       password,
       clientId,
       refreshToken,
+      importIndex: index,
       addedAt: new Date().toISOString(),
     });
   });
@@ -131,13 +148,17 @@ function generateId() {
  */
 function renderAccountList(highlightIds = null) {
   const accounts = getAccounts();
+  const searchKeyword = getAccountSearchKeyword();
+  const visibleAccounts = searchKeyword
+    ? accounts.filter(acc => (acc.email || '').toLowerCase().includes(searchKeyword))
+    : accounts;
   const listEl = document.getElementById('accountList');
   const countEl = document.getElementById('accountCount');
 
   // 更新计数，带动画
   const oldCount = parseInt(countEl.textContent) || 0;
   const newCount = accounts.length;
-  countEl.textContent = newCount;
+  countEl.textContent = searchKeyword ? `${visibleAccounts.length}/${newCount}` : newCount;
   if (newCount !== oldCount) {
     countEl.classList.add('badge-pulse');
     setTimeout(() => countEl.classList.remove('badge-pulse'), 600);
@@ -159,6 +180,21 @@ function renderAccountList(highlightIds = null) {
     return;
   }
 
+  if (visibleAccounts.length === 0) {
+    listEl.innerHTML = `
+      <div class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="M21 21l-4.35-4.35"/>
+        </svg>
+        <p>未找到邮箱</p>
+        <p class="text-muted">换个关键词试试</p>
+      </div>
+    `;
+    updateBulkDeleteButton(0);
+    return;
+  }
+
   // 全选容器 + 批量删除按钮
   let html = `
     <div class="select-all-wrapper">
@@ -173,7 +209,7 @@ function renderAccountList(highlightIds = null) {
     </div>
   `;
 
-  accounts.forEach((acc, index) => {
+  visibleAccounts.forEach((acc, index) => {
     const isNew = highlightIds && highlightIds.has(acc.id);
     html += `
       <div class="account-item ${isNew ? 'account-item-new' : ''}" data-id="${acc.id}" style="animation-delay: ${isNew ? index * 0.05 : 0}s">
@@ -566,17 +602,13 @@ function showSkeletonCards(count) {
  * 通过 Graph API 取件
  */
 async function fetchViaGraph(account, options) {
-  const response = await fetch('/api/fetch-graph', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email: account.email,
-      clientId: account.clientId,
-      refreshToken: account.refreshToken,
-      keyword: options.keyword || '',
-      limit: options.limit || 10,
-      sender: options.sender || '',
-    }),
+  const response = await secureApiFetch('/api/fetch-graph', {
+    email: account.email,
+    clientId: account.clientId,
+    refreshToken: account.refreshToken,
+    keyword: options.keyword || '',
+    limit: options.limit || 10,
+    sender: options.sender || '',
   });
 
   const data = await parseApiResponse(response);
@@ -592,17 +624,13 @@ async function fetchViaGraph(account, options) {
  * 通过 IMAP 取件
  */
 async function fetchViaIMAP(account, options) {
-  const response = await fetch('/api/fetch-imap', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email: account.email,
-      clientId: account.clientId,
-      refreshToken: account.refreshToken,
-      keyword: options.keyword || '',
-      limit: Math.min(options.limit || 5, 10),
-      sender: options.sender || '',
-    }),
+  const response = await secureApiFetch('/api/fetch-imap', {
+    email: account.email,
+    clientId: account.clientId,
+    refreshToken: account.refreshToken,
+    keyword: options.keyword || '',
+    limit: Math.min(options.limit || 5, 10),
+    sender: options.sender || '',
   });
 
   const data = await parseApiResponse(response);
@@ -612,6 +640,98 @@ async function fetchViaIMAP(account, options) {
     throw err;
   }
   return data;
+}
+
+async function secureApiFetch(url, payload, retryCount = 0) {
+  if (!window.crypto?.subtle) {
+    throw new Error('当前浏览器不支持安全请求加密，请升级浏览器');
+  }
+
+  const envelope = await createSecureEnvelope(payload);
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(envelope),
+  });
+
+  if ((response.status === 401 || response.status === 403) && retryCount < SECURITY_RETRY_LIMIT) {
+    _apiSecuritySession = null;
+    return secureApiFetch(url, payload, retryCount + 1);
+  }
+
+  return response;
+}
+
+async function getApiSecuritySession() {
+  const now = Date.now();
+  if (_apiSecuritySession && _apiSecuritySession.expiresAtMs - now > 60 * 1000) {
+    return _apiSecuritySession;
+  }
+
+  const response = await fetch('/api/security-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  const data = await response.json();
+
+  if (!response.ok || !data.success) {
+    throw new Error(data.error || '安全会话初始化失败');
+  }
+
+  _apiSecuritySession = {
+    sessionId: data.sessionId,
+    sessionToken: data.sessionToken,
+    sessionKey: data.sessionKey,
+    expiresAtMs: new Date(data.expiresAt).getTime(),
+  };
+
+  return _apiSecuritySession;
+}
+
+async function createSecureEnvelope(payload) {
+  const session = await getApiSecuritySession();
+  const keyBytes = base64UrlToBytes(session.sessionKey);
+  const cryptoKey = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['encrypt']);
+  const hmacKey = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const ivBytes = crypto.getRandomValues(new Uint8Array(12));
+  const nonce = bytesToBase64Url(crypto.getRandomValues(new Uint8Array(16)));
+  const timestamp = Date.now();
+  const plaintext = new TextEncoder().encode(JSON.stringify(payload));
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: ivBytes }, cryptoKey, plaintext);
+  const iv = bytesToBase64Url(ivBytes);
+  const ciphertext = bytesToBase64Url(new Uint8Array(encrypted));
+  const signedText = `${session.sessionId}.${nonce}.${timestamp}.${iv}.${ciphertext}`;
+  const signatureBytes = await crypto.subtle.sign('HMAC', hmacKey, new TextEncoder().encode(signedText));
+
+  return {
+    secure: true,
+    sessionId: session.sessionId,
+    sessionToken: session.sessionToken,
+    nonce,
+    timestamp,
+    iv,
+    ciphertext,
+    signature: bytesToBase64Url(new Uint8Array(signatureBytes)),
+  };
+}
+
+function bytesToBase64Url(bytes) {
+  let binary = '';
+  bytes.forEach(byte => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function base64UrlToBytes(value) {
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 }
 
 async function parseApiResponse(response) {
@@ -1007,6 +1127,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const emailDetailModal = document.getElementById('emailDetailModal');
   const importTextarea = document.getElementById('importTextarea');
   const btnConfirmImport = document.getElementById('btnConfirmImport');
+  const accountSearch = document.getElementById('accountSearch');
+
+  accountSearch.addEventListener('input', () => {
+    renderAccountList();
+  });
 
   document.getElementById('btnOpenImport').addEventListener('click', () => {
     importModal.classList.add('active');
