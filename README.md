@@ -2,6 +2,8 @@
 
 支持 Outlook IMAP OAuth2 和 Microsoft Graph API 双协议取件的轻量 Web 工具。
 
+默认取件范围包含收件箱和垃圾邮件文件夹。
+
 ## 本地运行
 
 ```bash

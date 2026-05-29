@@ -845,7 +845,7 @@ function renderEmailList(emails) {
         </div>
         <div class="email-subject">${escapeHtml(email.subject)}</div>
         <div class="email-preview">${escapeHtml(preview)}</div>
-        <div class="email-account-tag">📬 ${escapeHtml(email._account || '')}</div>
+        <div class="email-account-tag">📬 ${escapeHtml(email._account || '')}${email.folder ? ` · ${escapeHtml(formatFolderName(email.folder))}` : ''}</div>
       </div>
     `;
   });
@@ -911,6 +911,7 @@ function showEmailDetail(index) {
     <span><span class="meta-label">发件人</span> ${escapeHtml(email.fromName ? `${email.fromName} <${email.from}>` : email.from)}</span>
     <span><span class="meta-label">时间</span> ${formatDate(email.date, true)}</span>
     <span><span class="meta-label">协议</span> <span class="email-protocol ${email.protocol}" style="display:inline;font-size:0.75rem;">${email.protocol.toUpperCase()}</span></span>
+    ${email.folder ? `<span><span class="meta-label">文件夹</span> ${escapeHtml(formatFolderName(email.folder))}</span>` : ''}
     <span><span class="meta-label">账号</span> ${escapeHtml(email._account || '')}</span>
   `;
 
@@ -954,6 +955,16 @@ function formatDate(dateStr, full = false) {
   } catch {
     return dateStr;
   }
+}
+
+function formatFolderName(folder) {
+  const value = String(folder || '');
+  const normalized = value.toLowerCase();
+  if (normalized === 'inbox') return '收件箱';
+  if (normalized === 'junkemail' || normalized.includes('junk') || normalized.includes('spam') || value.includes('垃圾')) {
+    return '垃圾邮件';
+  }
+  return value;
 }
 
 /**
