@@ -22,7 +22,7 @@ module.exports = async function handler(req, res) {
 
   try {
     req.body = await unwrapSecureBody(req.body);
-    const { email, clientId, refreshToken, accessToken, keyword, limit, sender, folder } = req.body;
+    const { email, clientId, refreshToken, accessToken, keyword, limit, sender, folder, folders } = req.body;
 
     if (!email) {
       return res.status(400).json({ success: false, protocol: 'imap', error: '缺少 email', emails: [] });
@@ -42,7 +42,8 @@ module.exports = async function handler(req, res) {
     const emails = await fetchEmailsViaIMAP(email, token, {
       keyword: keyword || '',
       limit: Math.min(limit || 5, 10), // 最多10封，建议5封
-      folder: folder || 'INBOX',
+      folder,
+      folders,
       sender: sender || '',
     });
 

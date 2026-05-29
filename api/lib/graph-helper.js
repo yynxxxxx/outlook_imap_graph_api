@@ -3,6 +3,8 @@
  * 使用 Microsoft Graph API 获取邮件
  */
 
+const DEFAULT_GRAPH_FOLDERS = ['inbox', 'junkemail'];
+
 /**
  * 通过 Graph API 获取邮件
  * @param {string} accessToken - Graph API 的 access_token
@@ -10,13 +12,32 @@
  * @param {string} [options.keyword] - 搜索关键词
  * @param {number} [options.limit=10] - 获取数量
  * @param {string} [options.sender] - 发件人过滤
+ * @param {string|string[]} [options.folder] - 指定 Graph 文件夹
+ * @param {string[]} [options.folders] - 指定多个 Graph 文件夹
  * @returns {Promise<Array>} - 邮件列表
  */
 async function fetchEmailsViaGraph(accessToken, options = {}) {
-  const { keyword = '', limit = 10, sender = '' } = options;
+  const { keyword = '', limit = 10, sender = '', folder, folders } = options;
+  const targetFolders = normalizeFolderInput(folders || folder);
+  const folderList = targetFolders.length > 0 ? targetFolders : DEFAULT_GRAPH_FOLDERS;
+  const perFolderLimit = Math.max(limit, Math.ceil(limit / Math.max(folderList.length, 1)));
 
-  // 构建查询参数
-  let url = 'https://graph.microsoft.com/v1.0/me/messages?';
+  const results = [];
+  for (const targetFolder of folderList) {
+    const folderEmails = await fetchEmailsFromGraphFolder(accessToken, targetFolder, {
+      keyword,
+      limit: perFolderLimit,
+      sender,
+    });
+    results.push(...folderEmails);
+  }
+
+  return deduplicateAndLimit(results, limit);
+}
+
+async function fetchEmailsFromGraphFolder(accessToken, folder, options = {}) {
+  const { keyword = '', limit = 10, sender = '' } = options;
+  let url = `https://graph.microsoft.com/v1.0/me/mailFolders/${encodeURIComponent(folder)}/messages?`;
   const params = new URLSearchParams();
 
   // 选择返回的字段
@@ -56,7 +77,7 @@ async function fetchEmailsViaGraph(accessToken, options = {}) {
   }
 
   // 标准化邮件格式
-  const emails = (data.value || []).map(msg => ({
+  return (data.value || []).map(msg => ({
     id: msg.internetMessageId || msg.id,
     messageId: msg.internetMessageId || msg.id,
     subject: msg.subject || '(无主题)',
@@ -67,10 +88,28 @@ async function fetchEmailsViaGraph(accessToken, options = {}) {
     bodyHtml: msg.body?.contentType === 'html' ? msg.body?.content : '',
     bodyText: msg.body?.contentType === 'text' ? msg.body?.content : msg.bodyPreview,
     hasAttachments: msg.hasAttachments || false,
+    folder,
     protocol: 'graph',
   }));
+}
 
-  return emails;
+function normalizeFolderInput(input) {
+  if (!input) return [];
+  const values = Array.isArray(input) ? input : [input];
+  return values.map(value => String(value || '').trim()).filter(Boolean);
+}
+
+function deduplicateAndLimit(emails, limit) {
+  const seen = new Map();
+  emails
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .forEach(email => {
+      const key = email.messageId || `${email.subject}-${email.date}-${email.folder || ''}`;
+      if (!seen.has(key)) {
+        seen.set(key, email);
+      }
+    });
+  return Array.from(seen.values()).slice(0, limit);
 }
 
 module.exports = { fetchEmailsViaGraph };

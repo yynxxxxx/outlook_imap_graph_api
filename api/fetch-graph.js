@@ -22,7 +22,7 @@ module.exports = async function handler(req, res) {
 
   try {
     req.body = await unwrapSecureBody(req.body);
-    const { email, clientId, refreshToken, accessToken, keyword, limit, sender } = req.body;
+    const { email, clientId, refreshToken, accessToken, keyword, limit, sender, folder, folders } = req.body;
 
     if (!email) {
       return res.status(400).json({ success: false, protocol: 'graph', error: '缺少 email', emails: [] });
@@ -43,6 +43,8 @@ module.exports = async function handler(req, res) {
       keyword: keyword || '',
       limit: limit || 10,
       sender: sender || '',
+      folder,
+      folders,
     });
 
     return res.status(200).json({
