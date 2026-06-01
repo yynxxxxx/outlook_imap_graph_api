@@ -6,6 +6,9 @@
     "api/fetch-graph.js": {
       "maxDuration": 10
     },
+    "api/send-graph.js": {
+      "maxDuration": 10
+    },
     "api/refresh-token.js": {
       "maxDuration": 10
     },

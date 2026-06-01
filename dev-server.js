@@ -26,6 +26,7 @@ const apiHandlers = {
   '/api/refresh-token': require('./api/refresh-token'),
   '/api/fetch-graph': require('./api/fetch-graph'),
   '/api/fetch-imap': require('./api/fetch-imap'),
+  '/api/send-graph': require('./api/send-graph'),
 };
 
 const server = http.createServer(async (req, res) => {

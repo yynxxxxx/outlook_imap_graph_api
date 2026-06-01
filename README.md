@@ -60,6 +60,10 @@ server {
 | `SECURITY_SESSION_TTL_MS` | `600000` | 安全会话有效期 |
 | `SECURITY_REQUEST_WINDOW_MS` | `120000` | 取件请求时间窗 |
 | `SECURITY_NONCE_TTL_MS` | `600000` | 防重放 nonce 记忆时间 |
+| `TOKEN_CACHE_ENABLED` | `true` | 是否启用 access token 内存缓存，设为 `false` 可关闭 |
+| `TOKEN_CACHE_SAFETY_MS` | `300000` | AT 过期前多久停止复用并重新刷新 |
+| `TOKEN_CACHE_MAX_TTL_MS` | `3300000` | AT 最长内存缓存时间，默认 55 分钟 |
+| `TOKEN_CACHE_MAX_ENTRIES` | `2000` | AT 内存缓存最大条目数 |
 
 健康检查地址：`/healthz`
 
@@ -68,6 +72,8 @@ server {
 ```bash
 export API_SECURITY_SECRET="$(openssl rand -base64 32)"
 ```
+
+access token 缓存只保存在当前 Node.js 进程内存中，不写入硬盘、浏览器或数据库。Vercel 冷启动、函数实例切换、重新部署后缓存会自动消失。
 
 ## Docker 运行
 
@@ -85,3 +91,26 @@ docker run -d --name outlook-fetcher -p 3000:3000 outlook-fetcher
 ```
 
 页面里的“导出邮箱”会按同样格式导出，方便迁移或备份。
+
+## 发件接口
+
+已提供后端接口 `POST /api/send-graph`，前台不展示发件按钮或图标。接口复用现有安全请求封装，明文 JSON 会被拒绝；如需从页面脚本调用，可复用 `public/js/app.js` 里的 `secureApiFetch` 逻辑。
+
+解密后的业务参数：
+
+```json
+{
+  "email": "sender@outlook.com",
+  "clientId": "应用 Client ID",
+  "refreshToken": "刷新令牌",
+  "to": "receiver@example.com",
+  "cc": ["copy@example.com"],
+  "bcc": [],
+  "subject": "邮件标题",
+  "text": "纯文本正文",
+  "html": "<p>HTML 正文，可选</p>",
+  "saveToSentItems": true
+}
+```
+
+也可以直接传 `accessToken` 代替 `clientId` + `refreshToken`。`to`、`cc`、`bcc`、`replyTo` 支持字符串、字符串数组，或 `{ "email": "...", "name": "..." }` 格式对象。
