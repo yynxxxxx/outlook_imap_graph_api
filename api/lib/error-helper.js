@@ -24,6 +24,8 @@ function toPublicError(err, protocol = '') {
     message = '连接超时，请稍后重试或降低取件数量';
   } else if (lower.includes('mailboxnotenabledforrestapi') || lower.includes('errorinvaliduser')) {
     message = 'Graph 无法访问该邮箱，请检查账号类型或权限';
+  } else if (lower.includes('erroraccessdenied') || lower.includes('access is denied')) {
+    message = 'Graph 权限不足，请检查应用是否已授权 Mail.Send 等所需权限';
   } else if (raw.length > 180) {
     message = `${raw.slice(0, 180)}...`;
   }
