@@ -9,6 +9,7 @@
 
 // ==================== 全局状态 ====================
 const STORAGE_KEY = 'outlook_accounts';
+const APP_VERSION = '1.1.0-imap-container';
 const EXPORT_SEPARATOR = '----';
 const SECURITY_RETRY_LIMIT = 1;
 
