@@ -571,8 +571,18 @@ function normalizeWhitespace(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+function getRawErrorDetail(err) {
+  const parts = [
+    err?.message || err || "未知错误",
+    err?.responseText ? `IMAP response: ${err.responseText}` : "",
+    err?.responseStatus ? `IMAP status: ${err.responseStatus}` : "",
+    err?.executedCommand ? `IMAP command: ${err.executedCommand}` : "",
+  ];
+  return normalizeWhitespace(parts.filter(Boolean).join(" | "));
+}
+
 function toPublicError(err, protocol = "") {
-  const raw = normalizeWhitespace(err?.message || err || "未知错误");
+  const raw = getRawErrorDetail(err);
   const lower = raw.toLowerCase();
   const normalizedProtocol = String(protocol || "").toLowerCase();
   let message = raw;
@@ -595,6 +605,16 @@ function toPublicError(err, protocol = "") {
     message = "账号需要重新授权或补充权限";
     reason = "账号授权状态不足，Microsoft 要求用户交互确认或补充 consent";
     action = "请重新走授权流程，并确认包含取件/发件需要的权限";
+  } else if (lower.includes("ethrottle") || lower.includes("request is throttled") || lower.includes("backoff time")) {
+    code = "IMAP_RATE_LIMITED";
+    message = "IMAP 被 Microsoft 限流，请稍后重试";
+    reason = "Outlook IMAP 返回了限流或退避提示，通常是短时间批量账号/批量命令过多";
+    action = "请降低批量取件数量或间隔后重试；Graph 成功的账号可以忽略 IMAP 失败";
+  } else if (lower.includes("command failed") && normalizedProtocol === "imap") {
+    code = "IMAP_COMMAND_REJECTED";
+    message = "IMAP 命令被 Outlook 服务器拒绝";
+    reason = "服务器返回 NO/BAD，常见原因是账号未启用 IMAP、令牌缺少 IMAP 权限、邮箱文件夹不可访问或 IMAP 临时限制";
+    action = "如果 Graph 已成功取件可以忽略；如果需要 IMAP，请确认账号开启 IMAP 并重新授权包含 IMAP.AccessAsUser.All 的 refresh_token";
   } else if (lower.includes("mailboxnotenabledforrestapi") || lower.includes("errorinvaliduser")) {
     code = "GRAPH_MAILBOX_UNAVAILABLE";
     message = "Graph 无法访问该邮箱，请检查账号类型或权限";
