@@ -2,8 +2,18 @@ function normalizeWhitespace(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
+function getRawErrorDetail(err) {
+  const parts = [
+    err?.message || err || '未知错误',
+    err?.responseText ? `IMAP response: ${err.responseText}` : '',
+    err?.responseStatus ? `IMAP status: ${err.responseStatus}` : '',
+    err?.executedCommand ? `IMAP command: ${err.executedCommand}` : '',
+  ];
+  return normalizeWhitespace(parts.filter(Boolean).join(' | '));
+}
+
 function toPublicError(err, protocol = '') {
-  const raw = normalizeWhitespace(err?.message || err || '未知错误');
+  const raw = getRawErrorDetail(err);
   const lower = raw.toLowerCase();
   const normalizedProtocol = String(protocol || '').toLowerCase();
 
@@ -38,6 +48,16 @@ function toPublicError(err, protocol = '') {
     message = 'IMAP 认证失败，请检查账号权限和令牌 scope';
     reason = 'IMAP 服务器拒绝 XOAUTH2 登录，常见原因是令牌没有 IMAP.AccessAsUser.All 权限、账号未启用 IMAP 或令牌已失效';
     action = '请确认 Outlook 账号已启用 IMAP，并重新授权包含 IMAP 权限的 refresh_token';
+  } else if (lower.includes('ethrottle') || lower.includes('request is throttled') || lower.includes('backoff time')) {
+    code = 'IMAP_RATE_LIMITED';
+    message = 'IMAP 被 Microsoft 限流，请稍后重试';
+    reason = 'Outlook IMAP 返回了限流或退避提示，通常是短时间批量账号/批量命令过多';
+    action = '请降低批量取件数量或间隔后重试；Graph 成功的账号可以忽略 IMAP 失败';
+  } else if (lower.includes('command failed') && normalizedProtocol === 'imap') {
+    code = 'IMAP_COMMAND_REJECTED';
+    message = 'IMAP 命令被 Outlook 服务器拒绝';
+    reason = '服务器返回 NO/BAD，常见原因是账号未启用 IMAP、令牌缺少 IMAP 权限、邮箱文件夹不可访问或 IMAP 临时限制';
+    action = '如果 Graph 已成功取件可以忽略；如果需要 IMAP，请确认账号开启 IMAP 并重新授权包含 IMAP.AccessAsUser.All 的 refresh_token';
   } else if (lower.includes('timeout') || lower.includes('etimedout') || lower.includes('esockettimedout')) {
     code = 'UPSTREAM_TIMEOUT';
     message = '连接超时，请稍后重试或降低取件数量';

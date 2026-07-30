@@ -9,7 +9,7 @@
 
 // ==================== 全局状态 ====================
 const STORAGE_KEY = 'outlook_accounts';
-const APP_VERSION = '1.2.0-live-results';
+const APP_VERSION = '1.2.1-live-results';
 const EXPORT_SEPARATOR = '----';
 const SECURITY_RETRY_LIMIT = 1;
 
@@ -464,7 +464,7 @@ async function fetchEmails(accounts, options = {}) {
   showSkeletonCards(3);
 
   let visibleEmails = [];
-  const protocolErrors = [];
+  const failedAccountErrors = [];
   let successfulAccounts = 0;
   let failedAccounts = 0;
   renderFetchIssues([]);
@@ -554,8 +554,8 @@ async function fetchEmails(accounts, options = {}) {
       successfulAccounts++;
     } else {
       failedAccounts++;
+      failedAccountErrors.push(...accountErrors);
     }
-    protocolErrors.push(...accountErrors);
 
     // 收集邮件并标记来源账号
     results.forEach(result => {
@@ -579,7 +579,7 @@ async function fetchEmails(accounts, options = {}) {
       completedAccounts: i + 1,
       isFetching: i + 1 < accounts.length,
     });
-    renderFetchIssues(protocolErrors);
+    renderFetchIssues(failedAccountErrors);
   }
 
   // 合并去重
@@ -598,7 +598,7 @@ async function fetchEmails(accounts, options = {}) {
     completedAccounts: accounts.length,
     isFetching: false,
   });
-  renderFetchIssues(protocolErrors);
+  renderFetchIssues(failedAccountErrors);
 
   const imapCount = merged.filter(e => e.protocol === 'imap').length;
   const graphCount = merged.filter(e => e.protocol === 'graph').length;
@@ -606,9 +606,9 @@ async function fetchEmails(accounts, options = {}) {
   // 延迟隐藏进度条让用户看到完成状态
   setTimeout(() => showProgress(false), 2000);
 
-  if (protocolErrors.length > 0) {
+  if (failedAccountErrors.length > 0) {
     setStatus(successfulAccounts > 0 ? 'ready' : 'error', `完成：${successfulAccounts} 成功 / ${failedAccounts} 失败`);
-    showToast(`取件完成，有 ${protocolErrors.length} 个协议请求失败，详情已整理在结果区`, successfulAccounts > 0 ? 'warning' : 'error', 5000);
+    showToast(`取件完成，有 ${failedAccounts} 个邮箱所有协议都失败，详情已整理在结果区`, successfulAccounts > 0 ? 'warning' : 'error', 5000);
   } else {
     setStatus('ready', '就绪');
   }
