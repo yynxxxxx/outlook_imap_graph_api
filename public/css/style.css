@@ -813,6 +813,87 @@ body {
   border-radius: 4px;
 }
 
+.email-account-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.email-account-group-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: rgba(241, 245, 249, 0.86);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.email-account-group-main,
+.email-account-group-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.email-account-group-address {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-index-badge {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+
+.email-account-group-status {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.email-account-group-status.done {
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.email-account-group-status.pending {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+
+.email-account-group-meta {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.email-account-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .email-card {
   padding: 14px 18px;
   border-radius: var(--radius-md);
@@ -903,7 +984,15 @@ body {
   margin-top: 5px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.email-account-tag span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* --- 弹窗 --- */
@@ -1392,17 +1481,209 @@ body {
 /* --- 响应式 --- */
 @media (max-width: 900px) {
   .main-layout { flex-direction: column; }
-  .sidebar { width: 100%; min-width: unset; max-height: 300px; }
+  .sidebar {
+    width: 100%;
+    min-width: unset;
+    max-height: 42vh;
+  }
   .control-row { flex-wrap: wrap; }
   .input-narrow { width: 100%; min-width: unset; }
   .import-success-banner { padding: 24px 32px; }
 }
 
 @media (max-width: 600px) {
-  .app-container { padding: 10px; }
-  .app-header { padding: 12px 16px; }
+  html { font-size: 13px; }
+
+  body {
+    min-height: 100dvh;
+  }
+
+  .bg-orb {
+    filter: blur(72px);
+    opacity: 0.42;
+  }
+
+  .app-container {
+    padding: 8px;
+    gap: 8px;
+    min-height: 100dvh;
+  }
+
+  .app-header {
+    padding: 10px 12px;
+    border-radius: 12px;
+    gap: 10px;
+  }
+
+  .app-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+  }
+
+  .app-title {
+    font-size: 1rem;
+  }
+
+  .app-subtitle {
+    display: none;
+  }
+
+  .status-badge {
+    padding: 5px 9px;
+    font-size: 0.72rem;
+  }
+
+  .main-layout {
+    gap: 8px;
+  }
+
+  .sidebar {
+    padding: 12px;
+    gap: 10px;
+    max-height: 36vh;
+    border-radius: 12px;
+  }
+
+  .account-list {
+    min-height: 120px;
+  }
+
+  .account-item {
+    padding: 11px 10px;
+  }
+
+  .account-email {
+    font-size: 0.82rem;
+  }
+
+  .control-panel {
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .control-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .input-group,
+  .flex-grow {
+    width: 100%;
+  }
+
+  .input {
+    min-height: 40px;
+    font-size: 0.82rem;
+  }
+
   .control-actions { flex-direction: column; gap: 10px; }
-  .action-buttons { width: 100%; }
-  .action-buttons .btn { flex: 1; }
+  .protocol-toggles,
+  .action-buttons {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .toggle-pill {
+    width: 100%;
+    text-align: center;
+    padding: 8px 10px;
+  }
+
+  .action-buttons .btn {
+    width: 100%;
+    justify-content: center;
+    min-height: 40px;
+  }
+
+  .progress-bar-container {
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .progress-info {
+    gap: 10px;
+  }
+
+  #progressText {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .results-header {
+    align-items: flex-start;
+    gap: 8px;
+    flex-direction: column;
+    padding: 6px 2px;
+  }
+
+  .results-meta {
+    flex-wrap: wrap;
+  }
+
+  .email-list {
+    gap: 10px;
+    padding-right: 0;
+    overflow: visible;
+  }
+
+  .email-account-group-header {
+    position: static;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .email-account-group-meta {
+    flex-wrap: wrap;
+  }
+
+  .email-card {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .email-card-header {
+    align-items: flex-start;
+    gap: 6px;
+    flex-direction: column;
+  }
+
+  .email-from {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .email-date {
+    font-size: 0.68rem;
+  }
+
+  .email-subject,
+  .email-preview {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .email-subject {
+    -webkit-line-clamp: 2;
+  }
+
+  .email-preview {
+    -webkit-line-clamp: 3;
+  }
+
+  .fetch-issue-item summary {
+    grid-template-columns: auto 1fr;
+  }
+
+  .fetch-issue-message {
+    grid-column: 1 / -1;
+  }
+
   .import-success-banner { padding: 20px 24px; min-width: 260px; }
 }

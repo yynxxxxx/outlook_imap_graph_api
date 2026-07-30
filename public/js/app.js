@@ -9,7 +9,7 @@
 
 // ==================== 全局状态 ====================
 const STORAGE_KEY = 'outlook_accounts';
-const APP_VERSION = '1.1.0-imap-container';
+const APP_VERSION = '1.2.0-live-results';
 const EXPORT_SEPARATOR = '----';
 const SECURITY_RETRY_LIMIT = 1;
 
@@ -463,10 +463,16 @@ async function fetchEmails(accounts, options = {}) {
   // 先显示骨架屏占位
   showSkeletonCards(3);
 
-  const allEmails = [];
-  const fatalErrors = [];
+  let visibleEmails = [];
+  const protocolErrors = [];
   let successfulAccounts = 0;
+  let failedAccounts = 0;
   renderFetchIssues([]);
+  renderEmailList([], {
+    accounts,
+    completedAccounts: 0,
+    isFetching: true,
+  });
 
   for (let i = 0; i < accounts.length; i++) {
     const account = accounts[i];
@@ -541,34 +547,58 @@ async function fetchEmails(accounts, options = {}) {
     }
 
     const results = await Promise.all(promises);
+    const accountErrors = results.map(result => result._error).filter(Boolean);
     const accountSucceeded = results.some(result => result.success === true);
 
     if (accountSucceeded) {
       successfulAccounts++;
     } else {
-      fatalErrors.push(...results.map(result => result._error).filter(Boolean));
+      failedAccounts++;
     }
+    protocolErrors.push(...accountErrors);
 
     // 收集邮件并标记来源账号
     results.forEach(result => {
       if (result.emails && result.emails.length > 0) {
         result.emails.forEach(email => {
           email._account = account.email;
+          email._accountIndex = i;
         });
-        allEmails.push(...result.emails);
+        visibleEmails.push(...result.emails);
       }
     });
+
+    visibleEmails = deduplicateEmails(visibleEmails);
+    visibleEmails.sort((a, b) => {
+      const accountDelta = (a._accountIndex ?? 0) - (b._accountIndex ?? 0);
+      if (accountDelta !== 0) return accountDelta;
+      return new Date(b.date) - new Date(a.date);
+    });
+    renderEmailList(visibleEmails, {
+      accounts,
+      completedAccounts: i + 1,
+      isFetching: i + 1 < accounts.length,
+    });
+    renderFetchIssues(protocolErrors);
   }
 
   // 合并去重
   updateProgress(97, '去重合并中...');
-  const merged = deduplicateEmails(allEmails);
-  merged.sort((a, b) => new Date(b.date) - new Date(a.date));
+  const merged = deduplicateEmails(visibleEmails);
+  merged.sort((a, b) => {
+    const accountDelta = (a._accountIndex ?? 0) - (b._accountIndex ?? 0);
+    if (accountDelta !== 0) return accountDelta;
+    return new Date(b.date) - new Date(a.date);
+  });
 
   // 渲染结果
   updateProgress(100, '取件完成 ✅');
-  renderEmailList(merged);
-  renderFetchIssues(fatalErrors);
+  renderEmailList(merged, {
+    accounts,
+    completedAccounts: accounts.length,
+    isFetching: false,
+  });
+  renderFetchIssues(protocolErrors);
 
   const imapCount = merged.filter(e => e.protocol === 'imap').length;
   const graphCount = merged.filter(e => e.protocol === 'graph').length;
@@ -576,10 +606,9 @@ async function fetchEmails(accounts, options = {}) {
   // 延迟隐藏进度条让用户看到完成状态
   setTimeout(() => showProgress(false), 2000);
 
-  if (fatalErrors.length > 0) {
-    const failedAccounts = accounts.length - successfulAccounts;
+  if (protocolErrors.length > 0) {
     setStatus(successfulAccounts > 0 ? 'ready' : 'error', `完成：${successfulAccounts} 成功 / ${failedAccounts} 失败`);
-    showToast(`取件完成，但有 ${failedAccounts} 个邮箱所有协议都失败，详情已整理在结果区`, successfulAccounts > 0 ? 'warning' : 'error', 5000);
+    showToast(`取件完成，有 ${protocolErrors.length} 个协议请求失败，详情已整理在结果区`, successfulAccounts > 0 ? 'warning' : 'error', 5000);
   } else {
     setStatus('ready', '就绪');
   }
@@ -792,7 +821,7 @@ function simplifyErrorMessage(message) {
 function deduplicateEmails(emails) {
   const seen = new Map();
   emails.forEach(email => {
-    const key = email.messageId || `${email.subject}-${email.date}`;
+    const key = email.messageId || `${email._account || ''}-${email.subject}-${email.date}`;
     if (!seen.has(key)) {
       seen.set(key, email);
     }
@@ -806,12 +835,17 @@ function deduplicateEmails(emails) {
 /**
  * 渲染邮件列表
  */
-function renderEmailList(emails) {
+function renderEmailList(emails, options = {}) {
   const listEl = document.getElementById('emailList');
   const headerEl = document.getElementById('resultsHeader');
   const imapCountEl = document.getElementById('imapCount');
   const graphCountEl = document.getElementById('graphCount');
   const totalCountEl = document.getElementById('totalCount');
+  const {
+    accounts = [],
+    completedAccounts = accounts.length,
+    isFetching = false,
+  } = options;
 
   headerEl.style.display = 'flex';
 
@@ -822,7 +856,9 @@ function renderEmailList(emails) {
   graphCountEl.style.display = graphEmails.length > 0 ? 'inline' : 'none';
   imapCountEl.textContent = `IMAP: ${imapEmails.length}`;
   graphCountEl.textContent = `Graph: ${graphEmails.length}`;
-  totalCountEl.textContent = `共 ${emails.length} 封`;
+  totalCountEl.textContent = isFetching
+    ? `已完成 ${completedAccounts}/${accounts.length} · ${emails.length} 封`
+    : `共 ${emails.length} 封`;
 
   if (emails.length === 0) {
     listEl.innerHTML = `
@@ -831,20 +867,87 @@ function renderEmailList(emails) {
           <rect x="2" y="4" width="20" height="16" rx="2"/>
           <path d="M22 7L12 13L2 7"/>
         </svg>
-        <p>未获取到邮件</p>
-        <p class="text-muted">请检查关键词或协议设置</p>
+        <p>${isFetching ? '正在等待第一批邮件' : '未获取到邮件'}</p>
+        <p class="text-muted">${isFetching ? '邮箱完成后会立即显示在这里' : '请检查关键词或协议设置'}</p>
       </div>
     `;
+    window._currentEmails = [];
     return;
   }
 
+  window._currentEmails = emails;
+  const shouldGroupByAccount = accounts.length > 1 || new Set(emails.map(email => email._account).filter(Boolean)).size > 1;
+
   let html = '';
+  if (shouldGroupByAccount) {
+    html = renderGroupedEmailList(emails, accounts, completedAccounts, isFetching);
+  } else {
+    html = emails.map((email, index) => renderEmailCard(email, index)).join('');
+  }
+
+  listEl.innerHTML = html;
+}
+
+function renderGroupedEmailList(emails, accounts, completedAccounts, isFetching) {
+  const accountMap = new Map();
+  accounts.forEach((account, index) => {
+    accountMap.set(account.email, {
+      account,
+      index,
+      emails: [],
+    });
+  });
+
   emails.forEach((email, index) => {
+    const key = email._account || '未知账号';
+    if (!accountMap.has(key)) {
+      accountMap.set(key, {
+        account: { email: key },
+        index: email._accountIndex ?? accountMap.size,
+        emails: [],
+      });
+    }
+    accountMap.get(key).emails.push({ email, index });
+  });
+
+  const groups = Array.from(accountMap.values())
+    .filter(group => group.emails.length > 0 || (isFetching && group.index < completedAccounts))
+    .sort((a, b) => a.index - b.index);
+
+  return groups.map(group => {
+    const imapCount = group.emails.filter(item => item.email.protocol === 'imap').length;
+    const graphCount = group.emails.filter(item => item.email.protocol === 'graph').length;
+    const statusText = group.index < completedAccounts ? '已完成' : '等待中';
+    const countText = `${group.emails.length} 封`;
+
+    return `
+      <section class="email-account-group">
+        <div class="email-account-group-header">
+          <div class="email-account-group-main">
+            <span class="account-index-badge">#${group.index + 1}</span>
+            <span class="email-account-group-address" title="${escapeAttr(group.account.email)}">${escapeHtml(group.account.email)}</span>
+            <span class="email-account-group-status ${group.index < completedAccounts ? 'done' : 'pending'}">${statusText}</span>
+          </div>
+          <div class="email-account-group-meta">
+            <span>${countText}</span>
+            ${imapCount ? `<span class="email-protocol imap">IMAP ${imapCount}</span>` : ''}
+            ${graphCount ? `<span class="email-protocol graph">Graph ${graphCount}</span>` : ''}
+          </div>
+        </div>
+        <div class="email-account-group-list">
+          ${group.emails.map(item => renderEmailCard(item.email, item.index)).join('')}
+        </div>
+      </section>
+    `;
+  }).join('');
+}
+
+function renderEmailCard(email, index) {
     const date = formatDate(email.date);
     const fromDisplay = email.fromName || email.from;
     const preview = (email.bodyPreview || email.bodyText || '').substring(0, 120);
 
-    html += `
+    return `
       <div class="email-card" style="animation-delay: ${index * 0.04}s" onclick="showEmailDetail(${index})">
         <div class="email-card-header">
           <span class="email-from">
@@ -855,15 +958,12 @@ function renderEmailList(emails) {
         </div>
         <div class="email-subject">${escapeHtml(email.subject)}</div>
         <div class="email-preview">${escapeHtml(preview)}</div>
-        <div class="email-account-tag">📬 ${escapeHtml(email._account || '')}${email.folder ? ` · ${escapeHtml(formatFolderName(email.folder))}` : ''}</div>
+        <div class="email-account-tag">
+          <span>${escapeHtml(email._account || '')}</span>
+          ${email.folder ? `<span>${escapeHtml(formatFolderName(email.folder))}</span>` : ''}
+        </div>
       </div>
     `;
-  });
-
-  listEl.innerHTML = html;
-
-  // 存储当前邮件列表供详情查看
-  window._currentEmails = emails;
 }
 
 function renderFetchIssues(errors) {
