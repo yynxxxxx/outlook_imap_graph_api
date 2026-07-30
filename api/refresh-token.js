@@ -37,6 +37,13 @@ module.exports = async function handler(req, res) {
   } catch (err) {
     console.error('Token 刷新错误:', err);
     const publicError = toPublicError(err, 'token');
-    return res.status(err.statusCode || 500).json({ success: false, error: publicError.message, detail: publicError.detail });
+    return res.status(err.statusCode || 500).json({
+      success: false,
+      code: publicError.code,
+      error: publicError.message,
+      reason: publicError.reason,
+      action: publicError.action,
+      detail: publicError.detail,
+    });
   }
 };

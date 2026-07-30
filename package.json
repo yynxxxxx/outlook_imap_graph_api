@@ -6,10 +6,20 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "deploy": "vercel --prod"
+    "deploy": "vercel --prod",
+    "cf:dev": "wrangler dev",
+    "cf:deploy": "wrangler deploy",
+    "cf:dry-run": "wrangler deploy --dry-run",
+    "cf:dev:graph-only": "wrangler dev -c wrangler.graph-only.toml",
+    "cf:deploy:graph-only": "wrangler deploy -c wrangler.graph-only.toml",
+    "cf:dry-run:graph-only": "wrangler deploy -c wrangler.graph-only.toml --dry-run"
   },
   "dependencies": {
     "imapflow": "^1.0.170",
     "mailparser": "^3.7.2"
+  },
+  "devDependencies": {
+    "@cloudflare/containers": "^0.0.28",
+    "wrangler": "^4.110.0"
   }
 }
