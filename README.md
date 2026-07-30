@@ -4,6 +4,8 @@
 
 默认取件范围包含收件箱和垃圾邮件文件夹。
 
+后端接口说明见 [API.md](./API.md)。
+
 ## 本地运行
 
 ```bash
@@ -81,6 +83,16 @@ access token 缓存只保存在当前 Node.js 进程内存中，不写入硬盘�
 docker build -t outlook-fetcher .
 docker run -d --name outlook-fetcher -p 3000:3000 outlook-fetcher
 ```
+
+## Cloudflare Workers Paid / Containers 部署
+
+IMAP 需要 TCP/TLS 出站连接，Cloudflare 普通 Worker 不能直接跑 `imapflow`，付费后应部署默认的 Containers 配置：
+
+```bash
+npm run cf:deploy
+```
+
+`wrangler.toml` 使用 `src/container-worker.js` 和 `Dockerfile`，容器内复用同一套 Node API，因此 `/api/fetch-imap`、`/api/fetch-graph`、`/api/send-graph` 行为一致。`wrangler.graph-only.toml` 仅保留为不需要 IMAP 时的 Graph-only 备用配置。
 
 ## 导入/导出格式
 

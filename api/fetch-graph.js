@@ -59,7 +59,10 @@ module.exports = async function handler(req, res) {
     return res.status(err.statusCode || 200).json({
       success: false,
       protocol: 'graph',
+      code: publicError.code,
       error: publicError.message,
+      reason: publicError.reason,
+      action: publicError.action,
       detail: publicError.detail,
       emails: [],
     });

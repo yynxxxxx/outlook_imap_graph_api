@@ -614,6 +614,9 @@ async function fetchViaGraph(account, options) {
   const data = await parseApiResponse(response);
   if (!data.success) {
     const err = new Error(data.error || data.message || 'Graph API 取件失败');
+    err.code = data.code;
+    err.reason = data.reason;
+    err.action = data.action;
     err.detail = data.detail;
     throw err;
   }
@@ -636,6 +639,9 @@ async function fetchViaIMAP(account, options) {
   const data = await parseApiResponse(response);
   if (!data.success) {
     const err = new Error(data.error || data.message || 'IMAP 取件失败');
+    err.code = data.code;
+    err.reason = data.reason;
+    err.action = data.action;
     err.detail = data.detail;
     throw err;
   }
@@ -757,7 +763,10 @@ function normalizeFetchError(email, protocol, err) {
   return {
     email,
     protocol,
+    code: err?.code || '',
     error: simplifyErrorMessage(raw),
+    reason: err?.reason || '',
+    action: err?.action || '',
     raw: err?.detail || raw,
   };
 }
@@ -890,7 +899,12 @@ function renderFetchIssues(errors) {
             <span class="fetch-issue-email">${escapeHtml(err.email)}</span>
             <span class="fetch-issue-message">${escapeHtml(err.error)}</span>
           </summary>
-          <pre>${escapeHtml(err.raw || err.error)}</pre>
+          <div class="fetch-issue-detail">
+            ${err.code ? `<div><strong>错误码：</strong>${escapeHtml(err.code)}</div>` : ''}
+            ${err.reason ? `<div><strong>原因：</strong>${escapeHtml(err.reason)}</div>` : ''}
+            ${err.action ? `<div><strong>建议：</strong>${escapeHtml(err.action)}</div>` : ''}
+            <pre>${escapeHtml(err.raw || err.error)}</pre>
+          </div>
         </details>
       `).join('')}
     </div>

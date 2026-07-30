@@ -6,6 +6,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { toPublicError } = require('./api/lib/error-helper');
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -120,7 +121,15 @@ async function handleApi(req, res, pathname) {
   } catch (err) {
     console.error(`API 错误 [${pathname}]:`, err);
     if (!res.headersSent) {
-      sendJson(res, 500, { success: false, error: err.message || '服务器内部错误' });
+      const publicError = toPublicError(err);
+      sendJson(res, err.statusCode || 500, {
+        success: false,
+        code: publicError.code,
+        error: publicError.message,
+        reason: publicError.reason,
+        action: publicError.action,
+        detail: publicError.detail,
+      });
     }
   }
 }

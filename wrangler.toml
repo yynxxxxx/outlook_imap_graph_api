@@ -1,0 +1,22 @@
+name = "outlook-imap-graph-api"
+main = "src/container-worker.js"
+compatibility_date = "2026-07-12"
+workers_dev = true
+
+[[routes]]
+pattern = "mail.chatai.codes"
+custom_domain = true
+
+[[containers]]
+class_name = "OutlookImapGraphApi"
+image = "./Dockerfile"
+instance_type = "lite"
+max_instances = 1
+
+[[durable_objects.bindings]]
+name = "OUTLOOK_API"
+class_name = "OutlookImapGraphApi"
+
+[[migrations]]
+tag = "containers-v2"
+new_sqlite_classes = ["OutlookImapGraphApi"]
