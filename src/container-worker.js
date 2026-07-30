@@ -16,7 +16,6 @@ export class OutlookImapGraphApi extends Container {
 export default {
   async fetch(request, env) {
     const container = env.OUTLOOK_API.getByName("singleton");
-    await container.startAndWaitForPorts();
     return container.fetch(request);
   },
 };
