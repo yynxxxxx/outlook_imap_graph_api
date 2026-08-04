@@ -1,4 +1,4 @@
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.3.1';
 
 const STORAGE_KEY = 'outlook_accounts';
 const SECURITY_RETRY_LIMIT = 1;

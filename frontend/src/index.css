@@ -244,11 +244,27 @@ textarea:focus-visible {
   color: #64748b;
 }
 
-.segmented,
-.tabs {
+.segmented {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.tabs {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  border-radius: 10px;
+  background: #f3f6f3;
+  padding: 3px;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .protocol-toggle,
@@ -264,11 +280,53 @@ textarea:focus-visible {
   font-weight: 700;
 }
 
+.tab {
+  border-color: transparent;
+  background: transparent;
+  color: #475569;
+  transition: background-color 180ms ease, box-shadow 180ms ease, color 180ms ease, transform 120ms ease;
+}
+
+.tab:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.tab:active,
+.btn:active,
+.copy-button:active {
+  transform: scale(0.97);
+}
+
 .protocol-toggle.on.graph,
 .tab.active {
   border-color: #a7f3d0;
   background: #ecfdf5;
   color: #047857;
+}
+
+.tab.active {
+  border-color: transparent;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+}
+
+.tab-count {
+  display: inline-flex;
+  min-width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+  padding: 0 6px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.tab.active .tab-count {
+  background: #dcfce7;
+  color: #15803d;
 }
 
 .protocol-toggle.on.imap {
@@ -490,10 +548,11 @@ textarea:focus-visible {
 }
 
 .email-row {
-  display: flex;
+  display: grid;
   width: 100%;
   min-width: 0;
   align-items: center;
+  grid-template-columns: 34px 32px minmax(140px, 200px) minmax(0, 1fr) auto;
   gap: 10px;
   border: 0;
   border-bottom: 1px solid #e2e8f0;
@@ -526,6 +585,49 @@ textarea:focus-visible {
   color: #94a3b8;
 }
 
+.email-sender,
+.email-content,
+.email-meta {
+  min-width: 0;
+}
+
+.email-sender {
+  display: grid;
+  gap: 2px;
+}
+
+.email-account {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.email-content {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.email-subject {
+  color: #0f172a;
+  font-weight: 650;
+}
+
+.email-preview {
+  min-width: 0;
+  color: #64748b;
+}
+
+.email-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #64748b;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .email-row:last-child {
   border-bottom: 0;
 }
@@ -545,31 +647,6 @@ textarea:focus-visible {
   color: #047857;
   font-size: 12px;
   font-weight: 800;
-}
-
-.email-line,
-.email-subline {
-  display: grid;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-}
-
-.email-line {
-  grid-template-columns: minmax(110px, 180px) auto minmax(0, 1fr);
-}
-
-.email-subline {
-  margin-top: 2px;
-  grid-template-columns: minmax(100px, 220px) auto minmax(0, 1fr);
-  color: #64748b;
-  font-size: 13px;
-}
-
-.email-time {
-  flex: 0 0 auto;
-  color: #64748b;
-  font-size: 13px;
 }
 
 .account-result {
@@ -675,32 +752,76 @@ textarea:focus-visible {
     overflow: hidden;
   }
 
-  .inline-error summary,
-  .email-line,
-  .email-subline {
+  .inline-error summary {
     grid-template-columns: 1fr;
   }
 
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    overflow: visible;
+  }
+
+  .tab {
+    justify-content: center;
+    gap: 2px;
+    padding: 0 2px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .tab svg {
+    height: 14px;
+    width: 14px;
+  }
+
+  .tab-count {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 3px;
+    font-size: 10px;
+  }
+
   .email-row {
+    grid-template-columns: 34px 32px minmax(0, 1fr);
     align-items: flex-start;
   }
 
-  .email-time {
-    display: none;
+  .email-sender {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .email-content {
+    grid-column: 3;
+    grid-row: 2;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .email-preview {
+    flex-basis: 100%;
+  }
+
+  .email-meta {
+    grid-column: 3;
+    grid-row: 3;
+    justify-content: space-between;
+    width: 100%;
+    font-size: 12px;
   }
 
   .email-account-marker {
     min-width: 32px;
   }
 
-  .tabs,
   .segmented {
     display: grid;
     grid-template-columns: 1fr;
     width: 100%;
   }
 
-  .tab,
   .protocol-toggle {
     width: 100%;
     justify-content: center;
