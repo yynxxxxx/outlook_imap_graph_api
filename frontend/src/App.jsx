@@ -310,7 +310,7 @@ export default function App() {
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-lg font-semibold leading-tight sm:text-xl">邮箱取件系统</h1>
+              <h1 className="text-lg font-bold leading-tight text-[#111827] sm:text-xl">邮箱取件系统</h1>
               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">v{APP_VERSION}</span>
             </div>
             <p className="truncate text-sm text-slate-500">Outlook IMAP/Graph 与 Proton Mail API</p>
@@ -334,7 +334,13 @@ export default function App() {
             </div>
             <div className="relative mb-3">
               <Search className="input-icon" size={17} />
-              <input className="field pl-10" value={accountQuery} onChange={event => setAccountQuery(event.target.value)} placeholder="搜索邮箱" />
+              <input
+                aria-label="搜索邮箱"
+                className="field pl-10"
+                value={accountQuery}
+                onChange={event => setAccountQuery(event.target.value)}
+                placeholder="搜索邮箱"
+              />
             </div>
             <div className="mb-3 grid grid-cols-2 gap-2">
               <button className="btn primary" onClick={() => setImportOpen(true)}><Upload size={16} />导入</button>
@@ -364,10 +370,22 @@ export default function App() {
             <div className="grid gap-3 xl:grid-cols-[1fr_260px_116px]">
               <div className="relative">
                 <Search className="input-icon" size={17} />
-                <input className="field pl-10" value={keyword} onChange={event => setKeyword(event.target.value)} placeholder="关键词" />
+                <input
+                  aria-label="邮件关键词过滤"
+                  className="field pl-10"
+                  value={keyword}
+                  onChange={event => setKeyword(event.target.value)}
+                  placeholder="关键词"
+                />
               </div>
-              <input className="field" value={sender} onChange={event => setSender(event.target.value)} placeholder="发件人过滤" />
-              <select className="field" value={limit} onChange={event => setLimit(Number(event.target.value))}>
+              <input
+                aria-label="发件人过滤"
+                className="field"
+                value={sender}
+                onChange={event => setSender(event.target.value)}
+                placeholder="发件人过滤"
+              />
+              <select aria-label="每个邮箱取件数量" className="field" value={limit} onChange={event => setLimit(Number(event.target.value))}>
                 {[5, 10, 20, 30].map(value => <option key={value} value={value}>{value} 封</option>)}
               </select>
             </div>
@@ -407,9 +425,16 @@ export default function App() {
           <section className="panel p-0">
             <div className="flex flex-col gap-3 border-b border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="tabs" role="tablist">
-                <TabButton id="codes" active={activeTab} onClick={setActiveTab} icon={KeyRound} label={`验证码 ${codeItems.codes.length}`} />
-                <TabButton id="all" active={activeTab} onClick={setActiveTab} icon={Mail} label={`全部邮件 ${allEmails.length}`} />
-                <TabButton id="accounts" active={activeTab} onClick={setActiveTab} icon={Archive} label={`按账号 ${accountResults.length}`} />
+                <TabButton
+                  id="codes"
+                  active={activeTab}
+                  onClick={setActiveTab}
+                  icon={KeyRound}
+                  label="验证码汇总"
+                  count={codeItems.codes.length + codeItems.links.length}
+                />
+                <TabButton id="all" active={activeTab} onClick={setActiveTab} icon={Mail} label="全部邮件" count={allEmails.length} />
+                <TabButton id="accounts" active={activeTab} onClick={setActiveTab} icon={Archive} label="按账号分组" count={accountResults.length} />
               </div>
               <div className="flex flex-wrap gap-2 text-sm text-slate-500">
                 <ProtocolCount emails={allEmails} protocol="graph" />
@@ -420,7 +445,13 @@ export default function App() {
 
             {issues.length ? <IssueSummary issues={issues} /> : null}
 
-            <div className="min-h-[420px] p-3">
+            <div
+              id={`panel-${activeTab}`}
+              className="min-h-[420px] p-3"
+              role="tabpanel"
+              aria-labelledby={`tab-${activeTab}`}
+              aria-live="polite"
+            >
               {activeTab === 'codes' ? (
                 <CodePanel items={codeItems} onToast={showToast} />
               ) : activeTab === 'all' ? (
@@ -467,7 +498,7 @@ export default function App() {
 function AccountRow({ account, selected, onToggle }) {
   const provider = detectProvider(account);
   return (
-    <button className={`account-row ${selected ? 'selected' : ''}`} onClick={onToggle}>
+    <button className={`account-row ${selected ? 'selected' : ''}`} onClick={onToggle} type="button">
       <span className="checkbox">{selected ? <Check size={14} /> : null}</span>
       <span className="min-w-0 flex-1 text-left">
         <span className="block truncate text-sm font-medium">{account.email}</span>
@@ -486,11 +517,20 @@ function ProtocolToggle({ label, value, onChange, tone }) {
   );
 }
 
-function TabButton({ id, active, onClick, icon: Icon, label }) {
+function TabButton({ id, active, onClick, icon: Icon, label, count }) {
   return (
-    <button className={`tab ${active === id ? 'active' : ''}`} onClick={() => onClick(id)} role="tab" aria-selected={active === id}>
+    <button
+      id={`tab-${id}`}
+      aria-controls={`panel-${id}`}
+      aria-selected={active === id}
+      className={`tab ${active === id ? 'active' : ''}`}
+      onClick={() => onClick(id)}
+      role="tab"
+      type="button"
+    >
       <Icon size={16} />
       {label}
+      <span className="tab-count">{count}</span>
     </button>
   );
 }
@@ -503,10 +543,10 @@ function ProtocolCount({ emails, protocol }) {
 
 function CodePanel({ items, onToast }) {
   if (!items.codes.length && !items.links.length) {
-    return <EmptyState icon={KeyRound} title="暂无验证码或链接" text="取件后会自动汇总" />;
+    return <EmptyState icon={KeyRound} title="暂无验证码" text="取件完成后，自动识别的验证码和链接会展示在这里。" />;
   }
   return (
-    <div className="grid gap-3 xl:grid-cols-2">
+    <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
       {items.codes.map(item => <HighlightCard key={item.key} item={item} onToast={onToast} />)}
       {items.links.map(item => <HighlightCard key={item.key} item={item} onToast={onToast} />)}
     </div>
@@ -536,9 +576,14 @@ function HighlightCard({ item, onToast }) {
       </div>
       <div className="highlight-actions">
         <span className="text-xs text-slate-500">{relativeTime(item.email.date)}</span>
-        <button className={`copy-button ${copied ? 'copied' : ''}`} onClick={handleCopy} aria-label="复制">
+        <button
+          className={`copy-button ${copied ? 'copied' : ''}`}
+          onClick={handleCopy}
+          type="button"
+          aria-label={isLink ? '复制验证链接' : '复制验证码'}
+        >
           {copied ? <Check size={15} /> : <Copy size={15} />}
-          {copied ? '已复制' : '复制'}
+          {copied ? '已复制' : isLink ? '复制链接' : '复制验证码'}
         </button>
         {isLink ? <a className="icon-button" href={item.value} target="_blank" rel="noreferrer" aria-label="打开链接"><ExternalLink size={17} /></a> : null}
       </div>
@@ -557,23 +602,30 @@ function EmailList({ emails, onOpen }) {
 
 function EmailRow({ email, onOpen }) {
   const name = email.fromName || email.from || '?';
+  const preview = email.bodyPreview || email.bodyText || '';
+  const subject = email.subject || '(无主题)';
   return (
-    <button className="email-row" onClick={onOpen}>
+    <button
+      className="email-row"
+      onClick={onOpen}
+      type="button"
+      aria-label={`打开邮件：${subject}，来自 ${name}`}
+    >
       <span className="sender-avatar" aria-hidden="true">{name.trim().slice(0, 1).toUpperCase()}</span>
       <span className="star-button" aria-hidden="true"><Star size={16} /></span>
-      <span className="min-w-0 flex-1">
-        <span className="email-line">
-          <span className="truncate font-semibold">{name}</span>
-          <span className={`protocol-badge ${email.protocol}`}>{protocolLabel(email.protocol)}</span>
-          <span className="truncate text-slate-900">{email.subject || '(无主题)'}</span>
-        </span>
-        <span className="email-subline">
-          <span className="truncate">{email._account}</span>
-          <span>{formatFolderName(email.folder)}</span>
-          <span className="truncate">{email.bodyPreview || email.bodyText || ''}</span>
-        </span>
+      <span className="email-sender">
+        <span className="truncate font-semibold">{name}</span>
+        <span className="truncate email-account">{email._account}</span>
       </span>
-      <time className="email-time">{formatDate(email.date)}</time>
+      <span className="email-content">
+        <span className={`protocol-badge ${email.protocol}`}>{protocolLabel(email.protocol)}</span>
+        <span className="truncate email-subject">{subject}</span>
+        {preview ? <span className="truncate email-preview">- {preview}</span> : null}
+      </span>
+      <span className="email-meta">
+        <span>{formatFolderName(email.folder)}</span>
+        <time>{formatDate(email.date)}</time>
+      </span>
     </button>
   );
 }
