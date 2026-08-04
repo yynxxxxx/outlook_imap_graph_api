@@ -372,7 +372,6 @@ function useMailboxController(kind, showToast, recordFetch) {
     }
 
     abortRef.current.cancelled = false;
-    recordFetch?.(kind, runnable.length);
     setFetching(true);
     setIssues([]);
     setDetailEmail(null);
@@ -417,6 +416,9 @@ function useMailboxController(kind, showToast, recordFetch) {
     });
 
     setFetching(false);
+    if (successCount > 0) {
+      await recordFetch?.(kind, successCount);
+    }
     setStatus({
       tone: failures.length && !successCount ? 'error' : 'ready',
       text: failures.length ? `完成：${successCount} 成功 / ${failCount} 失败` : '就绪',

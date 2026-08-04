@@ -1,4 +1,4 @@
-export const APP_VERSION = '1.4.4';
+export const APP_VERSION = '1.4.5';
 
 const STORAGE_KEYS = {
   outlook: 'outlook_accounts',
@@ -122,11 +122,27 @@ export async function secureApiFetch(url, payload, retryCount = 0) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(envelope),
   });
-  if ((response.status === 401 || response.status === 403) && retryCount < SECURITY_RETRY_LIMIT) {
+  if (
+    (response.status === 401 || response.status === 403)
+    && retryCount < SECURITY_RETRY_LIMIT
+    && await shouldRetrySecuritySession(response)
+  ) {
     apiSecuritySession = null;
     return secureApiFetch(url, payload, retryCount + 1);
   }
   return response;
+}
+
+async function shouldRetrySecuritySession(response) {
+  try {
+    const data = await response.clone().json();
+    const code = String(data?.code || '');
+    const message = `${data?.error || ''} ${data?.reason || ''} ${data?.detail || ''}`;
+    return code === 'SECURITY_ENVELOPE_INVALID'
+      || /安全|签名|nonce|加密|会话|请求已过期|重复请求/.test(message);
+  } catch {
+    return true;
+  }
 }
 
 export async function parseFetchResponse(response, protocol) {

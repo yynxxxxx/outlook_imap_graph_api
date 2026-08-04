@@ -27,7 +27,7 @@ Content-Type: application/json
 2. 使用 `sessionKey` 对取件参数做 AES-256-GCM 加密。
 3. 使用 `sessionKey` 对 `sessionId.nonce.timestamp.iv.ciphertext` 做 HMAC-SHA256 签名。
 4. 将安全封包提交给 `/api/fetch-graph`、`/api/fetch-imap` 或 `/api/fetch-proton`。
-5. 如果返回 `401` 或 `403`，重新获取安全会话后重试一次。
+5. 只有当返回 `401` / `403` 且 `code=SECURITY_ENVELOPE_INVALID`，或错误内容明确包含“安全会话、签名、nonce、加密请求体、请求已过期”时，才重新获取安全会话后重试一次。`TOKEN_EXPIRED_OR_REVOKED`、`INVALID_CLIENT_ID`、`GRAPH_ACCESS_DENIED`、`IMAP_AUTH_FAILED` 等业务错误不要重试安全会话，应按错误里的 `action` 处理。
 
 安全会话默认有效期为 10 分钟，请求时间窗默认 2 分钟，`nonce` 会用于防重放。
 
@@ -100,6 +100,14 @@ Graph 和 IMAP 取件都支持两种鉴权方式。
 ```
 
 如果未传 `accessToken`，必须传 `clientId` 和 `refreshToken`。
+
+网页导入 Outlook 账号时使用四段文本：
+
+```text
+邮箱----密码----clientid----refresh_token
+```
+
+直连 API 时不要把整行原样塞进请求体，应解析成 `email/clientId/refreshToken`。Outlook 的 `password` 字段不会发送给 Graph/IMAP 接口，当前网页只保留它用于本地导入导出兼容。
 
 ## POST /api/fetch-graph
 
@@ -371,6 +379,8 @@ Graph 和 IMAP 取件都支持两种鉴权方式。
 | Proton 登录或会话失效 | `PROTON_AUTH_FAILED` / `PROTON_TOKEN_INVALID` |
 | Proton 超时 | `PROTON_TIMEOUT` |
 
+注意：`TOKEN_EXPIRED_OR_REVOKED` 即使通过 HTTP `401` / `403` 返回，也不是安全会话问题。不要反复刷新 `/api/security-session`，需要重新授权并导入新的 Microsoft `refresh_token`。
+
 ## Node.js 调用示例
 
 下面示例展示如何生成安全封包并调用 Graph、IMAP、Proton 任一取件接口。
@@ -480,6 +490,6 @@ fetchOutlookByGraph()
 | IMAP `limit` | `5` 到 `10` |
 | Proton `limit` | `10` 到 `20` |
 | 超时处理 | Proton 可能较慢，调用方建议设置 120 秒级别超时 |
-| 成功判定 | 同一 Outlook 账号如果 Graph 或 IMAP 任一成功，就可认为该账号取件成功 |
+| 成功判定 | 同一 Outlook 账号如果 Graph 或 IMAP 任一返回 `success=true`，就可认为该账号取件成功；另一协议失败不应覆盖成功结果 |
 
-账号、密码、refresh token、邮件正文不会写入 D1 统计库。D1 只记录站点取件次数、账号数量、取件类型和日期。
+账号、密码、refresh token、邮件正文不会写入 D1 统计库。D1 只记录站点成功取件次数、成功账号数量、取件类型和日期；全失败批次不会计入成功取件统计。

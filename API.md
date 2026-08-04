@@ -83,7 +83,9 @@ sessionId.nonce.timestamp.iv.ciphertext
 | 请求时间窗 | `2` 分钟 | 由 `SECURITY_REQUEST_WINDOW_MS` 控制 |
 | nonce 防重放记忆时间 | `10` 分钟 | 由 `SECURITY_NONCE_TTL_MS` 控制 |
 
-前端已有可复用实现：`frontend/src/App.jsx` 里的 `secureApiFetch()`、`createSecureEnvelope()`。
+前端已有可复用实现：`frontend/src/lib/mail.js` 里的 `secureApiFetch()`、`createSecureEnvelope()`。
+
+只有当 `401` / `403` 对应 `code=SECURITY_ENVELOPE_INVALID`，或错误内容明确指向安全会话、签名、nonce、加密请求体、请求过期时，前端才应重新申请安全会话并重试一次。`TOKEN_EXPIRED_OR_REVOKED`、`INVALID_CLIENT_ID`、`GRAPH_ACCESS_DENIED`、`IMAP_AUTH_FAILED` 等业务错误不要刷新安全会话，应按错误里的 `action` 处理。
 
 ## Outlook 通用账号字段
 
@@ -109,6 +111,8 @@ Outlook 取件和发件接口都支持两种鉴权方式。
 ```
 
 如果传入 `accessToken`，服务端不会刷新 token。若未传 `accessToken`，必须提供 `clientId` 和 `refreshToken`。Proton 账号字段见 `/api/fetch-proton`。
+
+网页导入 Outlook 账号时使用 `邮箱----密码----clientid----refresh_token`。直连 API 时不要把整行原样塞进请求体，应解析成 `email/clientId/refreshToken`；Outlook 的 `password` 不会发送给 Graph/IMAP。
 
 ## Access Token 缓存
 
@@ -631,6 +635,8 @@ curl -X POST https://mail.chatai.codes/api/security-session \
 | Graph 发件权限不足 | `Graph 权限不足，请检查应用是否已授权 Mail.Send 等所需权限` |
 | 安全请求缺失 | `请求缺少安全签名，请刷新页面重试` |
 | 重放请求 | `重复请求已拦截，请重新取件` |
+
+`TOKEN_EXPIRED_OR_REVOKED` 即使通过 HTTP `401` / `403` 返回，也不是安全会话问题。不要反复刷新 `/api/security-session`，需要重新授权并导入新的 Microsoft `refresh_token`。
 
 ## Node.js 调用示例
 
