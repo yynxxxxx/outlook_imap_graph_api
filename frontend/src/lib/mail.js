@@ -1,4 +1,4 @@
-export const APP_VERSION = '1.4.2';
+export const APP_VERSION = '1.4.3';
 
 const STORAGE_KEYS = {
   outlook: 'outlook_accounts',
