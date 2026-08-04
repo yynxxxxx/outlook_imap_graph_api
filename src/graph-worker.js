@@ -9,25 +9,35 @@ const usedNonces = new Map();
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
+let statsSchemaReady = false;
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
     if (url.pathname.startsWith("/api/")) {
-      return handleApi(request, env, url.pathname);
+      return handleApi(request, env, url);
     }
 
     return env.ASSETS.fetch(request);
   },
 };
 
-async function handleApi(request, env, pathname) {
+async function handleApi(request, env, url) {
+  const pathname = url.pathname;
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
+  if (pathname === "/api/fetch-stats") {
+    return handleFetchStats(request, env, url);
+  }
+
+  if (pathname === "/api/track-fetch") {
+    return handleTrackFetch(request, env);
   }
 
   if (request.method !== "POST") {
@@ -79,6 +89,44 @@ async function handleApi(request, env, pathname) {
       action: publicError.action,
       detail: publicError.detail,
     }, status);
+  }
+}
+
+async function handleFetchStats(request, env, url) {
+  if (request.method !== "GET") {
+    return jsonResponse({ success: false, error: "统计读取接口仅支持 GET" }, 405);
+  }
+
+  try {
+    await ensureStatsSchema(env.FETCH_STATS_DB);
+    const stats = await readFetchStats(env.FETCH_STATS_DB, normalizeStatsDayKey(url.searchParams.get("day")));
+    return jsonResponse({ success: true, stats });
+  } catch (error) {
+    return jsonResponse({ success: false, error: error?.message || "统计读取失败" }, 500);
+  }
+}
+
+async function handleTrackFetch(request, env) {
+  if (request.method !== "POST") {
+    return jsonResponse({ success: false, error: "统计写入接口仅支持 POST" }, 405);
+  }
+
+  try {
+    await ensureStatsSchema(env.FETCH_STATS_DB);
+    const body = await readJsonBody(request);
+    const kind = normalizeFetchKind(body.kind);
+    if (!kind) return jsonResponse({ success: false, error: "统计类型无效" }, 400);
+
+    const dayKey = normalizeStatsDayKey(body.dayKey);
+    const accountCount = normalizeAccountCount(body.accountCount);
+    await env.FETCH_STATS_DB.prepare(
+      "INSERT INTO fetch_events (kind, account_count, day_key) VALUES (?, ?, ?)",
+    ).bind(kind, accountCount, dayKey).run();
+
+    const stats = await readFetchStats(env.FETCH_STATS_DB, dayKey);
+    return jsonResponse({ success: true, stats });
+  } catch (error) {
+    return jsonResponse({ success: false, error: error?.message || "统计写入失败" }, 500);
   }
 }
 
@@ -235,16 +283,22 @@ async function fetchEmailsFromGraphFolder(accessToken, folder, options = {}) {
   const params = new URLSearchParams();
   params.set("$select", "id,subject,from,receivedDateTime,bodyPreview,body,internetMessageId,hasAttachments");
   params.set("$top", String(Math.min(limit, 50)));
-  params.set("$orderby", "receivedDateTime desc");
-  if (keyword) params.set("$search", `"${keyword}"`);
+  if (keyword) {
+    params.set("$search", `"${keyword}"`);
+  } else {
+    params.set("$orderby", "receivedDateTime desc");
+  }
   if (sender) params.set("$filter", `from/emailAddress/address eq '${sender}'`);
+
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    "Content-Type": "application/json",
+  };
+  if (keyword) headers.ConsistencyLevel = "eventual";
 
   const response = await fetch(`https://graph.microsoft.com/v1.0/me/mailFolders/${encodeURIComponent(folder)}/messages?${params}`, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
+    headers,
   });
   const data = await response.json();
 
@@ -445,6 +499,81 @@ async function readJsonBody(request) {
   }
 }
 
+async function ensureStatsSchema(db) {
+  if (!db) throw new Error("未绑定 FETCH_STATS_DB");
+  if (statsSchemaReady) return;
+
+  await db.batch([
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS fetch_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL CHECK (kind IN ('outlook', 'proton')),
+        account_count INTEGER NOT NULL DEFAULT 0 CHECK (account_count >= 0),
+        day_key TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_fetch_events_day_key ON fetch_events(day_key)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_fetch_events_kind ON fetch_events(kind)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_fetch_events_created_at ON fetch_events(created_at)"),
+  ]);
+  statsSchemaReady = true;
+}
+
+async function readFetchStats(db, dayKey) {
+  const totals = await db.prepare(`
+    SELECT
+      COUNT(*) AS totalFetches,
+      COALESCE(SUM(account_count), 0) AS totalAccounts,
+      COALESCE(SUM(CASE WHEN kind = 'outlook' THEN 1 ELSE 0 END), 0) AS outlookFetches,
+      COALESCE(SUM(CASE WHEN kind = 'proton' THEN 1 ELSE 0 END), 0) AS protonFetches
+    FROM fetch_events
+  `).first();
+  const today = await db.prepare(`
+    SELECT
+      COUNT(*) AS todayFetches,
+      COALESCE(SUM(account_count), 0) AS todayAccounts,
+      COALESCE(SUM(CASE WHEN kind = 'outlook' THEN 1 ELSE 0 END), 0) AS todayOutlookFetches,
+      COALESCE(SUM(CASE WHEN kind = 'proton' THEN 1 ELSE 0 END), 0) AS todayProtonFetches
+    FROM fetch_events
+    WHERE day_key = ?
+  `).bind(dayKey).first();
+
+  return {
+    totalFetches: numberValue(totals?.totalFetches),
+    todayFetches: numberValue(today?.todayFetches),
+    totalAccounts: numberValue(totals?.totalAccounts),
+    todayAccounts: numberValue(today?.todayAccounts),
+    outlookFetches: numberValue(totals?.outlookFetches),
+    protonFetches: numberValue(totals?.protonFetches),
+    todayOutlookFetches: numberValue(today?.todayOutlookFetches),
+    todayProtonFetches: numberValue(today?.todayProtonFetches),
+    date: dayKey,
+  };
+}
+
+function normalizeFetchKind(value) {
+  const kind = String(value || "").trim().toLowerCase();
+  return kind === "outlook" || kind === "proton" ? kind : "";
+}
+
+function normalizeAccountCount(value) {
+  const count = Math.floor(Number(value || 0));
+  if (!Number.isFinite(count)) return 0;
+  return Math.max(0, Math.min(count, 1000));
+}
+
+function normalizeStatsDayKey(value) {
+  const dayKey = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) return dayKey;
+  return new Date().toISOString().slice(0, 10);
+}
+
+function numberValue(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? number : 0;
+}
+
 function normalizeFolderInput(input) {
   if (!input) return [];
   const values = Array.isArray(input) ? input : [input];
@@ -620,6 +749,11 @@ function toPublicError(err, protocol = "") {
     message = "Graph 无法访问该邮箱，请检查账号类型或权限";
     reason = "Graph 端认为该账号不是可访问的 Exchange/Outlook 邮箱，或当前令牌无法访问邮箱";
     action = "请确认账号类型支持 Graph 邮件接口，并重新授权 Mail.Read 权限";
+  } else if (lower.includes("searchwithorderby") || (lower.includes("$orderby") && lower.includes("$search"))) {
+    code = "GRAPH_SEARCH_ORDER_UNSUPPORTED";
+    message = "Graph 关键词搜索不能同时使用排序参数";
+    reason = "Microsoft Graph 不支持在 $search 查询里同时携带 $orderby";
+    action = "系统已改为搜索后本地按收件时间排序；请重新执行关键词取件";
   } else if (lower.includes("erroraccessdenied") || lower.includes("access is denied")) {
     code = "GRAPH_ACCESS_DENIED";
     message = normalizedProtocol === "graph" ? "Graph 权限不足，请检查应用是否已授权所需权限" : "权限不足，请检查应用授权范围";

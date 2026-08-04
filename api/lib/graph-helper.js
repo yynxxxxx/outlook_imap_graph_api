@@ -43,13 +43,14 @@ async function fetchEmailsFromGraphFolder(accessToken, folder, options = {}) {
   // 选择返回的字段
   params.set('$select', 'id,subject,from,receivedDateTime,bodyPreview,body,internetMessageId,hasAttachments');
   params.set('$top', String(Math.min(limit, 50))); // 最多50封
-  params.set('$orderby', 'receivedDateTime desc');
 
   // 搜索/过滤
   const filters = [];
   if (keyword) {
     // 使用 $search 进行全文搜索
     params.set('$search', `"${keyword}"`);
+  } else {
+    params.set('$orderby', 'receivedDateTime desc');
   }
   if (sender) {
     filters.push(`from/emailAddress/address eq '${sender}'`);
@@ -60,12 +61,15 @@ async function fetchEmailsFromGraphFolder(accessToken, folder, options = {}) {
 
   url += params.toString();
 
+  const headers = {
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  };
+  if (keyword) headers.ConsistencyLevel = 'eventual';
+
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
   });
 
   const data = await response.json();

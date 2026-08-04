@@ -17,6 +17,8 @@ const DIST_DIR = path.join(__dirname, 'dist');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const STATIC_DIR = fs.existsSync(DIST_DIR) ? DIST_DIR : PUBLIC_DIR;
 const APP_VERSION = require('./package.json').version;
+const runtimeFetchEvents = [];
+const MAX_RUNTIME_EVENTS = 50000;
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -38,6 +40,8 @@ const apiHandlers = {
   '/api/fetch-imap': require('./api/fetch-imap'),
   '/api/fetch-proton': require('./api/fetch-proton'),
   '/api/send-graph': require('./api/send-graph'),
+  '/api/fetch-stats': handleFetchStats,
+  '/api/track-fetch': handleTrackFetch,
 };
 
 function sendJson(res, statusCode, data) {
@@ -104,7 +108,7 @@ function readJsonBody(req) {
 
 async function handleApi(req, res, pathname) {
   res.setHeader('Access-Control-Allow-Origin', CORS_ORIGIN);
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
@@ -136,6 +140,77 @@ async function handleApi(req, res, pathname) {
       });
     }
   }
+}
+
+function handleFetchStats(req, res) {
+  const url = new URL(req.url, `http://${req.headers.host || `${HOST}:${PORT}`}`);
+  const dayKey = normalizeStatsDayKey(url.searchParams.get('day'));
+  res.status(200).json({ success: true, stats: readRuntimeFetchStats(dayKey) });
+}
+
+function handleTrackFetch(req, res) {
+  const kind = normalizeFetchKind(req.body?.kind);
+  if (!kind) {
+    res.status(400).json({ success: false, error: '统计类型无效' });
+    return;
+  }
+
+  const dayKey = normalizeStatsDayKey(req.body?.dayKey);
+  runtimeFetchEvents.push({
+    kind,
+    accountCount: normalizeAccountCount(req.body?.accountCount),
+    dayKey,
+    createdAt: new Date().toISOString(),
+  });
+  if (runtimeFetchEvents.length > MAX_RUNTIME_EVENTS) {
+    runtimeFetchEvents.splice(0, runtimeFetchEvents.length - MAX_RUNTIME_EVENTS);
+  }
+
+  res.status(200).json({ success: true, stats: readRuntimeFetchStats(dayKey) });
+}
+
+function readRuntimeFetchStats(dayKey) {
+  const totals = runtimeFetchEvents.reduce((acc, event) => {
+    acc.totalFetches += 1;
+    acc.totalAccounts += event.accountCount;
+    if (event.kind === 'outlook') acc.outlookFetches += 1;
+    if (event.kind === 'proton') acc.protonFetches += 1;
+    if (event.dayKey === dayKey) {
+      acc.todayFetches += 1;
+      acc.todayAccounts += event.accountCount;
+      if (event.kind === 'outlook') acc.todayOutlookFetches += 1;
+      if (event.kind === 'proton') acc.todayProtonFetches += 1;
+    }
+    return acc;
+  }, {
+    totalFetches: 0,
+    todayFetches: 0,
+    totalAccounts: 0,
+    todayAccounts: 0,
+    outlookFetches: 0,
+    protonFetches: 0,
+    todayOutlookFetches: 0,
+    todayProtonFetches: 0,
+  });
+
+  return { ...totals, date: dayKey };
+}
+
+function normalizeFetchKind(value) {
+  const kind = String(value || '').trim().toLowerCase();
+  return kind === 'outlook' || kind === 'proton' ? kind : '';
+}
+
+function normalizeAccountCount(value) {
+  const count = Math.floor(Number(value || 0));
+  if (!Number.isFinite(count)) return 0;
+  return Math.max(0, Math.min(count, 1000));
+}
+
+function normalizeStatsDayKey(value) {
+  const dayKey = String(value || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) return dayKey;
+  return new Date().toISOString().slice(0, 10);
 }
 
 function safeStaticPath(pathname) {
