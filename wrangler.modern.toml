@@ -15,7 +15,7 @@ custom_domain = true
 class_name = "OutlookImapGraphApi"
 image = "./Dockerfile"
 instance_type = "lite"
-max_instances = 1
+max_instances = 2
 
 [[durable_objects.bindings]]
 name = "OUTLOOK_API"
