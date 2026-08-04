@@ -9,6 +9,11 @@ directory = "./public"
 binding = "ASSETS"
 run_worker_first = ["/api/*"]
 
+[[d1_databases]]
+binding = "FETCH_STATS_DB"
+database_name = "outlook-imap-graph-api-stats"
+database_id = "17bddc33-8aed-4d45-b412-e9cd69ce1fb3"
+
 [[routes]]
 pattern = "mail.chatai.codes"
 custom_domain = true

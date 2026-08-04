@@ -1,22 +1,39 @@
-export const APP_VERSION = '1.3.1';
+export const APP_VERSION = '1.4.1';
 
-const STORAGE_KEY = 'outlook_accounts';
+const STORAGE_KEYS = {
+  outlook: 'outlook_accounts',
+  proton: 'proton_accounts',
+};
 const SECURITY_RETRY_LIMIT = 1;
 const OUTLOOK_DOMAINS = ['outlook.com', 'hotmail.com', 'live.com', 'msn.com'];
 const PROTON_DOMAINS = ['proton.me', 'protonmail.com', 'pm.me', 'protonmail.ch'];
 
 let apiSecuritySession = null;
 
-export function readAccounts() {
+export function readAccounts(provider = 'outlook') {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    const normalizedProvider = provider === 'proton' ? 'proton' : 'outlook';
+    const key = STORAGE_KEYS[normalizedProvider];
+    const current = JSON.parse(localStorage.getItem(key) || '[]');
+    const accounts = Array.isArray(current) ? current : [];
+
+    if (normalizedProvider === 'proton' && accounts.length === 0) {
+      const legacy = readLegacyMixedAccounts();
+      return legacy.filter(account => detectProvider(account) === 'proton');
+    }
+
+    return accounts.filter(account => detectProvider(account) === normalizedProvider);
   } catch {
     return [];
   }
 }
 
-export function persistAccounts(accounts) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
+export function persistAccounts(accounts, provider = 'outlook') {
+  const normalizedProvider = provider === 'proton' ? 'proton' : 'outlook';
+  localStorage.setItem(
+    STORAGE_KEYS[normalizedProvider],
+    JSON.stringify(normalizeAccounts(accounts).filter(account => detectProvider(account) === normalizedProvider)),
+  );
 }
 
 export function normalizeAccounts(accounts) {
@@ -158,31 +175,45 @@ export function normalizeSessionPatch(session) {
 }
 
 export function extractHighlights(emails) {
-  const codeSeen = new Set();
-  const linkSeen = new Set();
-  const codes = [];
-  const links = [];
-  emails.forEach(email => {
+  const latestByService = new Map();
+  const sorted = Array.isArray(emails)
+    ? [...emails].sort((a, b) => new Date(b.date) - new Date(a.date))
+    : [];
+
+  sorted.forEach(email => {
     const text = `${email.subject || ''}\n${email.bodyPreview || ''}\n${email.bodyText || ''}`;
-    const codeMatches = text.match(/\b\d{4,8}\b/g) || [];
-    codeMatches.forEach(value => {
-      const key = `${email._account}:${value}`;
-      if (!codeSeen.has(key)) {
-        codeSeen.add(key);
-        codes.push({ key: `code:${key}`, type: 'code', value, email });
-      }
-    });
-    const linkMatches = text.match(/https?:\/\/[^\s<>"')]+/g) || [];
-    linkMatches.forEach(value => {
-      const clean = value.replace(/[.,;!?，。；！？]+$/, '');
-      const key = `${email._account}:${clean}`;
-      if (!linkSeen.has(key)) {
-        linkSeen.add(key);
-        links.push({ key: `link:${key}`, type: 'link', value: clean, email });
-      }
+    const codeMatches = extractVerificationCodes(text);
+    if (!codeMatches.length) return;
+
+    const serviceName = getHighlightServiceName(email);
+    const serviceKey = normalizeServiceKey(serviceName, email);
+    if (latestByService.has(serviceKey)) return;
+
+    latestByService.set(serviceKey, {
+      key: `service:${serviceKey}`,
+      type: 'code',
+      value: codeMatches[0],
+      email,
+      service: serviceName,
+      serviceKey,
+      colorIndex: hashString(serviceKey) % 6,
     });
   });
-  return { codes: codes.slice(0, 80), links: links.slice(0, 80) };
+
+  return { codes: Array.from(latestByService.values()).slice(0, 80), links: [] };
+}
+
+export function downloadTextFile(text, filename) {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const link = document.createElement('a');
+  const objectUrl = URL.createObjectURL(blob);
+  link.href = objectUrl;
+  link.download = filename;
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 500);
 }
 
 export function deduplicateEmails(emails) {
@@ -264,6 +295,73 @@ function splitImportLine(raw) {
     if (raw.includes(sep)) return raw.split(sep).map(item => item.trim());
   }
   return raw.split(/\s+/).map(item => item.trim());
+}
+
+function getHighlightServiceName(email) {
+  const senderName = String(email?.fromName || '').trim().replace(/\s+/g, ' ');
+  const senderAddress = String(email?.from || '').trim();
+  const subject = String(email?.subject || '').trim();
+
+  if (senderName && !looksLikeEmailAddress(senderName)) {
+    return senderName;
+  }
+
+  if (senderAddress.includes('@')) {
+    const domain = senderAddress.split('@').pop()?.toLowerCase() || '';
+    return domainToServiceName(domain) || senderAddress;
+  }
+
+  if (subject) return subject.slice(0, 32);
+  return senderAddress || '未知服务';
+}
+
+function extractVerificationCodes(text) {
+  const preferred = [];
+  const preferredPattern = /(?:验证码|校验码|动态码|安全码|verification code|security code|login code|passcode|otp|code)[^\d]{0,30}(\d{4,8})/gi;
+  let match = preferredPattern.exec(text);
+  while (match) {
+    preferred.push(match[1]);
+    match = preferredPattern.exec(text);
+  }
+
+  const fallback = (text.match(/\b\d{4,8}\b/g) || []).filter(value => !/^(19|20)\d{2}$/.test(value));
+  return Array.from(new Set([...preferred, ...fallback]));
+}
+
+function normalizeServiceKey(serviceName, email) {
+  const senderAddress = String(email?.from || '').trim().toLowerCase();
+  const senderName = String(serviceName || '').trim().toLowerCase();
+  return [senderName || 'unknown', senderAddress || ''].filter(Boolean).join('|');
+}
+
+function domainToServiceName(domain) {
+  const cleaned = String(domain || '').trim().toLowerCase();
+  if (!cleaned) return '';
+  const parts = cleaned.split('.').filter(Boolean);
+  if (parts.length <= 2) return cleaned;
+  return parts.slice(-2).join('.');
+}
+
+function looksLikeEmailAddress(value) {
+  return /@/.test(String(value || ''));
+}
+
+function hashString(value) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = ((hash << 5) - hash) + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function readLegacyMixedAccounts() {
+  try {
+    const value = JSON.parse(localStorage.getItem(STORAGE_KEYS.outlook) || '[]');
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
 }
 
 async function createSecureEnvelope(payload) {

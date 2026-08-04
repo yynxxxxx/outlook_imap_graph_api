@@ -103,6 +103,11 @@ function toPublicError(err, protocol = '') {
     message = 'Graph 无法访问该邮箱，请检查账号类型或权限';
     reason = 'Graph 端认为该账号不是可访问的 Exchange/Outlook 邮箱，或当前令牌无法访问邮箱';
     action = '请确认账号类型支持 Graph 邮件接口，并重新授权 Mail.Read 权限';
+  } else if (lower.includes('searchwithorderby') || (lower.includes('$orderby') && lower.includes('$search'))) {
+    code = 'GRAPH_SEARCH_ORDER_UNSUPPORTED';
+    message = 'Graph 关键词搜索不能同时使用排序参数';
+    reason = 'Microsoft Graph 不支持在 $search 查询里同时携带 $orderby';
+    action = '系统已改为搜索后本地按收件时间排序；请重新执行关键词取件';
   } else if (lower.includes('erroraccessdenied') || lower.includes('access is denied')) {
     code = 'GRAPH_ACCESS_DENIED';
     message = normalizedProtocol === 'graph' ? 'Graph 权限不足，请检查应用是否已授权所需权限' : '权限不足，请检查应用授权范围';

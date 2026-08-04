@@ -17,6 +17,11 @@ max_instances = 1
 name = "OUTLOOK_API"
 class_name = "OutlookImapGraphApi"
 
+[[d1_databases]]
+binding = "FETCH_STATS_DB"
+database_name = "outlook-imap-graph-api-stats"
+database_id = "17bddc33-8aed-4d45-b412-e9cd69ce1fb3"
+
 [[migrations]]
 tag = "containers-v2"
 new_sqlite_classes = ["OutlookImapGraphApi"]
