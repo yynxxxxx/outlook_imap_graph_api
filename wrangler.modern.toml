@@ -1,13 +1,13 @@
-name = "outlook-imap-graph-api"
+name = "outlook-imap-graph-api-modern"
 main = "src/container-worker.js"
 compatibility_date = "2026-07-12"
 workers_dev = true
 
 [vars]
-UI_VARIANT = "legacy"
+UI_VARIANT = "modern"
 
 [[routes]]
-pattern = "mail.chatai.codes"
+pattern = "mail.dimosky.online"
 custom_domain = true
 
 [[containers]]
@@ -26,5 +26,5 @@ database_name = "outlook-imap-graph-api-stats"
 database_id = "17bddc33-8aed-4d45-b412-e9cd69ce1fb3"
 
 [[migrations]]
-tag = "containers-v2"
+tag = "containers-modern-v1"
 new_sqlite_classes = ["OutlookImapGraphApi"]

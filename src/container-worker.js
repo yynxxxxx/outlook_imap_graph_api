@@ -18,6 +18,7 @@ export class OutlookImapGraphApi extends Container {
     NODE_ENV: "production",
     HOST: "0.0.0.0",
     PORT: "3000",
+    UI_VARIANT: "modern",
   };
 }
 
@@ -34,6 +35,13 @@ export default {
     }
 
     const container = env.OUTLOOK_API.getByName("singleton");
+    await container.startAndWaitForPorts({
+      startOptions: {
+        envVars: {
+          UI_VARIANT: env.UI_VARIANT === "legacy" ? "legacy" : "modern",
+        },
+      },
+    });
     return container.fetch(request);
   },
 };

@@ -593,6 +593,17 @@ textarea:focus-visible {
   color: #1d4ed8;
 }
 
+.btn.danger {
+  border-color: rgba(225, 29, 72, 0.18);
+  background: rgba(254, 242, 242, 0.92);
+  color: #be123c;
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: rgba(255, 228, 230, 0.96);
+  box-shadow: 0 10px 18px rgba(225, 29, 72, 0.12);
+}
+
 .btn.subtle {
   border-color: rgba(148, 163, 184, 0.2);
   background: rgba(255, 255, 255, 0.72);
@@ -1446,6 +1457,27 @@ textarea:focus-visible {
   padding: 12px 14px;
   color: #475569;
   font-size: 13px;
+}
+
+.confirm-copy {
+  margin: 0;
+  color: #475569;
+  line-height: 1.65;
+}
+
+.delete-preview-list {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(225, 29, 72, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 241, 242, 0.58);
+  padding: 10px 12px;
+  color: #334155;
+  font-size: 13px;
+}
+
+.delete-preview-list .muted {
+  color: #64748b;
 }
 
 .modal-foot {
