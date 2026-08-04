@@ -141,6 +141,8 @@ Graph 和 IMAP 取件都支持两种鉴权方式。
 | `folder` | string 或 string[] | 否 | - | 指定单个或多个 Graph 文件夹 |
 | `folders` | string[] | 否 | `["inbox","junkemail"]` | 指定多个 Graph 文件夹，优先于 `folder` |
 
+当 `keyword` 和 `sender` 同时传入时，服务端不会向 Graph 同时发送 `$search` 与 `$filter`。系统先用 `$search` 做关键词搜索，再在服务端按发件人邮箱精确过滤，避免 Graph 返回 `SearchWithFilter` 错误。
+
 成功响应：
 
 ```json

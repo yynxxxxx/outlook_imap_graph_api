@@ -281,14 +281,17 @@ async function fetchEmailsViaGraph(accessToken, options = {}) {
 async function fetchEmailsFromGraphFolder(accessToken, folder, options = {}) {
   const { keyword = "", limit = 10, sender = "" } = options;
   const params = new URLSearchParams();
+  const normalizedSender = String(sender || "").trim().toLowerCase();
   params.set("$select", "id,subject,from,receivedDateTime,bodyPreview,body,internetMessageId,hasAttachments");
-  params.set("$top", String(Math.min(limit, 50)));
+  // Graph 不支持同时使用 $search 和 $filter；组合筛选时多取一页，再在服务端按发件人精确过滤。
+  params.set("$top", String(Math.min(keyword && normalizedSender ? 50 : limit, 50)));
   if (keyword) {
     params.set("$search", `"${keyword}"`);
+  } else if (normalizedSender) {
+    params.set("$filter", `from/emailAddress/address eq '${escapeODataLiteral(sender)}'`);
   } else {
     params.set("$orderby", "receivedDateTime desc");
   }
-  if (sender) params.set("$filter", `from/emailAddress/address eq '${sender}'`);
 
   const headers = {
     Authorization: `Bearer ${accessToken}`,
@@ -306,7 +309,7 @@ async function fetchEmailsFromGraphFolder(accessToken, folder, options = {}) {
     throw new Error(`Graph API 错误: ${data.error?.code || response.status} - ${data.error?.message || JSON.stringify(data)}`);
   }
 
-  return (data.value || []).map((msg) => ({
+  const emails = (data.value || []).map((msg) => ({
     id: msg.internetMessageId || msg.id,
     messageId: msg.internetMessageId || msg.id,
     subject: msg.subject || "(无主题)",
@@ -320,6 +323,13 @@ async function fetchEmailsFromGraphFolder(accessToken, folder, options = {}) {
     folder,
     protocol: "graph",
   }));
+
+  if (!normalizedSender) return emails;
+  return emails.filter((email) => String(email.from || "").trim().toLowerCase() === normalizedSender);
+}
+
+function escapeODataLiteral(value) {
+  return String(value || "").replace(/'/g, "''");
 }
 
 async function sendMailViaGraph(accessToken, options = {}) {
@@ -754,6 +764,11 @@ function toPublicError(err, protocol = "") {
     message = "Graph 关键词搜索不能同时使用排序参数";
     reason = "Microsoft Graph 不支持在 $search 查询里同时携带 $orderby";
     action = "系统已改为搜索后本地按收件时间排序；请重新执行关键词取件";
+  } else if (lower.includes("searchwithfilter") || (lower.includes("$filter") && lower.includes("$search"))) {
+    code = "GRAPH_SEARCH_FILTER_UNSUPPORTED";
+    message = "Graph 关键词搜索不能同时使用发件人过滤";
+    reason = "Microsoft Graph 不支持在 $search 查询里同时携带 $filter";
+    action = "系统会先按关键词搜索，再在服务端按发件人精确过滤；请重新执行取件";
   } else if (lower.includes("erroraccessdenied") || lower.includes("access is denied")) {
     code = "GRAPH_ACCESS_DENIED";
     message = normalizedProtocol === "graph" ? "Graph 权限不足，请检查应用是否已授权所需权限" : "权限不足，请检查应用授权范围";

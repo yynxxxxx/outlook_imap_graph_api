@@ -39,24 +39,21 @@ async function fetchEmailsFromGraphFolder(accessToken, folder, options = {}) {
   const { keyword = '', limit = 10, sender = '' } = options;
   let url = `https://graph.microsoft.com/v1.0/me/mailFolders/${encodeURIComponent(folder)}/messages?`;
   const params = new URLSearchParams();
+  const normalizedSender = String(sender || '').trim().toLowerCase();
 
   // 选择返回的字段
   params.set('$select', 'id,subject,from,receivedDateTime,bodyPreview,body,internetMessageId,hasAttachments');
-  params.set('$top', String(Math.min(limit, 50))); // 最多50封
+  // Graph 不支持同时使用 $search 和 $filter；组合筛选时多取一页，再在服务端按发件人精确过滤。
+  params.set('$top', String(Math.min(keyword && normalizedSender ? 50 : limit, 50)));
 
   // 搜索/过滤
-  const filters = [];
   if (keyword) {
     // 使用 $search 进行全文搜索
     params.set('$search', `"${keyword}"`);
+  } else if (normalizedSender) {
+    params.set('$filter', `from/emailAddress/address eq '${escapeODataLiteral(sender)}'`);
   } else {
     params.set('$orderby', 'receivedDateTime desc');
-  }
-  if (sender) {
-    filters.push(`from/emailAddress/address eq '${sender}'`);
-  }
-  if (filters.length > 0) {
-    params.set('$filter', filters.join(' and '));
   }
 
   url += params.toString();
@@ -81,7 +78,7 @@ async function fetchEmailsFromGraphFolder(accessToken, folder, options = {}) {
   }
 
   // 标准化邮件格式
-  return (data.value || []).map(msg => ({
+  const emails = (data.value || []).map(msg => ({
     id: msg.internetMessageId || msg.id,
     messageId: msg.internetMessageId || msg.id,
     subject: msg.subject || '(无主题)',
@@ -95,6 +92,13 @@ async function fetchEmailsFromGraphFolder(accessToken, folder, options = {}) {
     folder,
     protocol: 'graph',
   }));
+
+  if (!normalizedSender) return emails;
+  return emails.filter(email => String(email.from || '').trim().toLowerCase() === normalizedSender);
+}
+
+function escapeODataLiteral(value) {
+  return String(value || '').replace(/'/g, "''");
 }
 
 function normalizeFolderInput(input) {

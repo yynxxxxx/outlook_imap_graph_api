@@ -108,6 +108,11 @@ function toPublicError(err, protocol = '') {
     message = 'Graph 关键词搜索不能同时使用排序参数';
     reason = 'Microsoft Graph 不支持在 $search 查询里同时携带 $orderby';
     action = '系统已改为搜索后本地按收件时间排序；请重新执行关键词取件';
+  } else if (lower.includes('searchwithfilter') || (lower.includes('$filter') && lower.includes('$search'))) {
+    code = 'GRAPH_SEARCH_FILTER_UNSUPPORTED';
+    message = 'Graph 关键词搜索不能同时使用发件人过滤';
+    reason = 'Microsoft Graph 不支持在 $search 查询里同时携带 $filter';
+    action = '系统会先按关键词搜索，再在服务端按发件人精确过滤；请重新执行取件';
   } else if (lower.includes('erroraccessdenied') || lower.includes('access is denied')) {
     code = 'GRAPH_ACCESS_DENIED';
     message = normalizedProtocol === 'graph' ? 'Graph 权限不足，请检查应用是否已授权所需权限' : '权限不足，请检查应用授权范围';

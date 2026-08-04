@@ -253,6 +253,8 @@ curl -X POST https://mail.chatai.codes/api/security-session \
 | `folder` | string 或 string[] | 否 | - | 指定单个或多个 Graph 文件夹 |
 | `folders` | string[] | 否 | `["inbox","junkemail"]` | 指定多个 Graph 文件夹，优先于 `folder` |
 
+当 `keyword` 和 `sender` 同时传入时，服务端先使用 Graph `$search`，再在服务端按发件人精确过滤，不会发送 Graph 不支持的 `$search + $filter` 组合。
+
 成功响应：
 
 ```json
