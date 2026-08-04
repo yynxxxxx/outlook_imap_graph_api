@@ -1,6 +1,6 @@
 {
   "name": "outlook-dual-fetcher",
-  "version": "1.4.5",
+  "version": "1.4.6",
   "description": "邮箱取件系统 (Outlook IMAP/Graph + Proton Mail API)",
   "private": true,
   "scripts": {

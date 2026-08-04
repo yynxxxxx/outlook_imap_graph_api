@@ -5,7 +5,7 @@ workers_dev = true
 
 [vars]
 UI_VARIANT = "legacy"
-CONTAINER_REVISION = "1.4.5"
+CONTAINER_REVISION = "1.4.6"
 
 [[routes]]
 pattern = "mail.chatai.codes"
