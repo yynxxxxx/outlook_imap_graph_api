@@ -120,6 +120,7 @@ Outlook 取件和发件接口都支持两种鉴权方式。
 | `TOKEN_CACHE_SAFETY_MS` | `300000` | AT 过期前多久停止复用并重新刷新 |
 | `TOKEN_CACHE_MAX_TTL_MS` | `3300000` | AT 最长内存缓存时间，默认 55 分钟 |
 | `TOKEN_CACHE_MAX_ENTRIES` | `2000` | AT 内存缓存最大条目数 |
+| `PROTON_MESSAGE_CONCURRENCY` | `3` | Proton 单封详情拉取与正文解密并发数，范围 1-6 |
 
 缓存只存在于当前函数实例内存中，不写硬盘、不写浏览器、不写数据库。Vercel 冷启动、实例切换或重新部署后缓存会消失。
 

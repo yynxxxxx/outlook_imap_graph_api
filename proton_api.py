@@ -12,8 +12,11 @@ import contextlib
 import html
 import io
 import json
+import os
 import re
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any
 
@@ -36,6 +39,9 @@ SENSITIVE_KEYS = (
     "RefreshToken",
     "Authorization",
 )
+
+DEFAULT_MESSAGE_CONCURRENCY = 3
+MAX_MESSAGE_CONCURRENCY = 6
 
 
 class PublicProtonError(Exception):
@@ -156,10 +162,13 @@ def fetch_proton_account(payload: dict[str, Any]) -> dict[str, Any]:
 
         address_keys = get_address_private_keys(session) if filtered_messages else []
         passphrases = get_address_key_passphrases(session, password, address_keys) if address_keys else {}
-        emails = [
-            normalize_message(session, msg, address_keys, passphrases)
-            for msg in filtered_messages[:limit]
-        ]
+        emails = normalize_messages(
+            session,
+            filtered_messages[:limit],
+            address_keys,
+            passphrases,
+            session_tokens,
+        )
     except PublicProtonError:
         raise
     except Exception as exc:
@@ -211,6 +220,80 @@ def normalize_message(session, msg: dict[str, Any], address_keys: list[dict[str,
         "folder": "inbox",
         "protocol": "proton",
     }
+
+
+def normalize_messages(
+    session,
+    messages: list[dict[str, Any]],
+    address_keys: list[dict[str, Any]],
+    passphrases: dict[str, list[str]],
+    session_tokens: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if not messages:
+        return []
+
+    concurrency = get_message_concurrency(len(messages))
+    if concurrency <= 1:
+        return [normalize_message(session, msg, address_keys, passphrases) for msg in messages]
+
+    auth_context = get_session_auth_context(session, session_tokens)
+    if not auth_context.get("uid") or not auth_context.get("accessToken"):
+        return [normalize_message(session, msg, address_keys, passphrases) for msg in messages]
+
+    worker_state = threading.local()
+
+    def get_worker_session():
+        worker_session = getattr(worker_state, "session", None)
+        if worker_session is None:
+            worker_session = bind_authenticated_session(
+                uid=auth_context["uid"],
+                access_token=auth_context["accessToken"],
+                refresh_token=auth_context.get("refreshToken"),
+                expires_in=auth_context.get("expiresIn"),
+                scope=auth_context.get("scope"),
+            )
+            worker_state.session = worker_session
+        return worker_session
+
+    def normalize_at(index: int, msg: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        return index, normalize_message(get_worker_session(), msg, address_keys, passphrases)
+
+    results: list[dict[str, Any] | None] = [None] * len(messages)
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        futures = [
+            executor.submit(normalize_at, index, msg)
+            for index, msg in enumerate(messages)
+        ]
+        for future in as_completed(futures):
+            index, email = future.result()
+            results[index] = email
+
+    return [email for email in results if email is not None]
+
+
+def get_message_concurrency(message_count: int) -> int:
+    configured = os.environ.get("PROTON_MESSAGE_CONCURRENCY")
+    return min(
+        message_count,
+        clamp_int(
+            configured,
+            default=DEFAULT_MESSAGE_CONCURRENCY,
+            minimum=1,
+            maximum=MAX_MESSAGE_CONCURRENCY,
+        ),
+    )
+
+
+def get_session_auth_context(session, session_tokens: dict[str, Any]) -> dict[str, Any]:
+    authorization = str(session.headers.get("Authorization") or "")
+    bearer_token = authorization.removeprefix("Bearer ").strip()
+    return prune_empty({
+        "uid": session_tokens.get("uid") or session.headers.get("X-Pm-Uid"),
+        "accessToken": session_tokens.get("accessToken") or bearer_token,
+        "refreshToken": session_tokens.get("refreshToken"),
+        "expiresIn": session_tokens.get("expiresIn"),
+        "scope": session_tokens.get("scope"),
+    })
 
 
 def filter_message_metadata(messages: list[dict[str, Any]], keyword: str, sender: str) -> list[dict[str, Any]]:

@@ -69,6 +69,7 @@ server {
 | `TOKEN_CACHE_MAX_ENTRIES` | `2000` | AT 内存缓存最大条目数 |
 | `PYTHON_BIN` | `python3` | Proton 取件适配器使用的 Python 解释器 |
 | `PROTON_FETCH_TIMEOUT_MS` | `120000` | Proton 单次取件超时时间 |
+| `PROTON_MESSAGE_CONCURRENCY` | `3` | Proton 单封详情拉取与正文解密并发数，范围 1-6 |
 | `PROTON_PROXY_URL` | 空 | 可选 Proton API 代理，例如 `socks5h://...`，不应写入仓库 |
 
 健康检查地址：`/healthz`
