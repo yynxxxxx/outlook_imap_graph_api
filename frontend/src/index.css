@@ -736,6 +736,21 @@ textarea:focus-visible {
   text-align: left;
 }
 
+.account-copy-button {
+  height: 34px;
+  width: 34px;
+  flex: 0 0 34px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.68);
+  color: #64748b;
+}
+
+.account-copy-button:hover:not(:disabled) {
+  border-color: rgba(15, 118, 110, 0.26);
+  background: rgba(236, 253, 245, 0.95);
+  color: var(--primary-strong);
+}
+
 .account-row:hover {
   border-color: rgba(15, 118, 110, 0.18);
   background: rgba(236, 253, 245, 0.56);

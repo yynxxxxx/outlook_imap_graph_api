@@ -729,6 +729,7 @@ function MailboxPage({ controller }) {
                 result={controller.resultById.get(account.id)}
                 selected={controller.selectedIds.has(account.id)}
                 onToggle={() => controller.toggleSelect(account.id)}
+                onToast={controller.showToast}
               />
             )) : (
               <EmptyState icon={Mail} title={`没有${copy.accountName}`} text="导入后会显示在这里" compact />
@@ -878,9 +879,28 @@ function ProtocolControls({ controller }) {
   );
 }
 
-function AccountRow({ account, result, selected, onToggle }) {
+function AccountRow({ account, result, selected, onToggle, onToast }) {
+  function handleKeyDown(event) {
+    if (event.target !== event.currentTarget) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    onToggle();
+  }
+
+  function handleCopy(event) {
+    event.stopPropagation();
+    copyText(account.email, '邮箱已复制', onToast);
+  }
+
   return (
-    <button className={`account-row ${result?.status || ''} ${selected ? 'selected' : ''}`} onClick={onToggle} type="button">
+    <div
+      className={`account-row ${result?.status || ''} ${selected ? 'selected' : ''}`}
+      onClick={onToggle}
+      onKeyDown={handleKeyDown}
+      role="button"
+      tabIndex={0}
+      aria-pressed={selected}
+    >
       <span className="checkbox">{selected ? <Check size={14} /> : null}</span>
       <span className="min-w-0 flex-1 text-left">
         <span className="block truncate text-sm font-semibold">{account.email}</span>
@@ -888,7 +908,16 @@ function AccountRow({ account, result, selected, onToggle }) {
           {result ? <MiniResultStatus result={result} /> : null}
         </span>
       </span>
-    </button>
+      <button
+        className="account-copy-button icon-button compact"
+        onClick={handleCopy}
+        type="button"
+        aria-label={`复制邮箱 ${account.email}`}
+        title="复制邮箱"
+      >
+        <Copy size={15} />
+      </button>
+    </div>
   );
 }
 
