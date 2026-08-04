@@ -2,3 +2,10 @@ node_modules/
 .env
 .DS_Store
 npm-debug.log*
+dist/
+__pycache__/
+*.pyc
+proton_test_accpunt.json
+proton_proxy_url.txt
+design-system/
+proton邮箱API端点文档.md

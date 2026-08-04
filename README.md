@@ -1,8 +1,8 @@
-# Outlook 快速取件
+# 邮箱取件系统
 
-支持 Outlook IMAP OAuth2 和 Microsoft Graph API 双协议取件的轻量 Web 工具。
+支持 Outlook IMAP OAuth2、Microsoft Graph API 和 Proton Mail API 的批量取件工具。
 
-默认取件范围包含收件箱和垃圾邮件文件夹。
+前端已重写为 React + Tailwind 工作台，批量取件会按账号渐进显示结果；同一账号只要任一协议成功，就不会再把另一协议失败展示成最终错误。
 
 后端接口说明见 [API.md](./API.md)。
 
@@ -10,6 +10,7 @@
 
 ```bash
 npm install
+npm run build
 npm start
 ```
 
@@ -66,6 +67,9 @@ server {
 | `TOKEN_CACHE_SAFETY_MS` | `300000` | AT 过期前多久停止复用并重新刷新 |
 | `TOKEN_CACHE_MAX_TTL_MS` | `3300000` | AT 最长内存缓存时间，默认 55 分钟 |
 | `TOKEN_CACHE_MAX_ENTRIES` | `2000` | AT 内存缓存最大条目数 |
+| `PYTHON_BIN` | `python3` | Proton 取件适配器使用的 Python 解释器 |
+| `PROTON_FETCH_TIMEOUT_MS` | `120000` | Proton 单次取件超时时间 |
+| `PROTON_PROXY_URL` | 空 | 可选 Proton API 代理，例如 `socks5h://...`，不应写入仓库 |
 
 健康检查地址：`/healthz`
 
@@ -92,17 +96,35 @@ IMAP 需要 TCP/TLS 出站连接，Cloudflare 普通 Worker 不能直接跑 `ima
 npm run cf:deploy
 ```
 
-`wrangler.toml` 使用 `src/container-worker.js` 和 `Dockerfile`，容器内复用同一套 Node API，因此 `/api/fetch-imap`、`/api/fetch-graph`、`/api/send-graph` 行为一致。`wrangler.graph-only.toml` 仅保留为不需要 IMAP 时的 Graph-only 备用配置。
+`wrangler.toml` 使用 `src/container-worker.js` 和 `Dockerfile`，容器内复用同一套 Node API，因此 `/api/fetch-imap`、`/api/fetch-graph`、`/api/fetch-proton`、`/api/send-graph` 行为一致。`wrangler.graph-only.toml` 仅保留为不需要 IMAP 时的 Graph-only 备用配置。
 
 ## 导入/导出格式
 
-每行一个邮箱：
+每行一个邮箱。Outlook：
 
 ```text
 账号----密码----clientid----刷新令牌
 ```
 
-页面里的“导出邮箱”会按同样格式导出，方便迁移或备份。
+Proton：
+
+```text
+账号----密码
+```
+
+Proton 也支持导出/导入 `账号----密码----uid----刷新令牌`。页面里的“导出邮箱”会按对应服务商格式导出，方便迁移或备份。
+
+## Proton 取件
+
+后端接口 `POST /api/fetch-proton` 复用 `proton_register.py` 里的 SRP 登录、邮件列表、单封详情和 PGP 正文解密逻辑，通过 `proton_api.py` 以 JSON stdin/stdout 接入 Node。
+
+本地真实测试：
+
+```bash
+/Users/sky/code-tools/frida/venv/bin/python3 proton_fetch_test.py
+```
+
+测试脚本只输出成功状态、邮件数量和是否解密，不输出账号密码或 token。
 
 ## 发件接口
 

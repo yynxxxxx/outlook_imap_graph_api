@@ -1,6 +1,6 @@
 /**
  * Production server for cloud/VPS deployment.
- * Serves static files from /public and reuses the existing API handlers.
+ * Serves the built frontend from /dist and reuses the existing API handlers.
  */
 
 const http = require('http');
@@ -13,7 +13,10 @@ const HOST = process.env.HOST || '0.0.0.0';
 const MAX_BODY_BYTES = Number(process.env.MAX_BODY_BYTES || 1024 * 1024);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 
+const DIST_DIR = path.join(__dirname, 'dist');
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const STATIC_DIR = fs.existsSync(DIST_DIR) ? DIST_DIR : PUBLIC_DIR;
+const APP_VERSION = require('./package.json').version;
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -33,6 +36,7 @@ const apiHandlers = {
   '/api/refresh-token': require('./api/refresh-token'),
   '/api/fetch-graph': require('./api/fetch-graph'),
   '/api/fetch-imap': require('./api/fetch-imap'),
+  '/api/fetch-proton': require('./api/fetch-proton'),
   '/api/send-graph': require('./api/send-graph'),
 };
 
@@ -134,12 +138,12 @@ async function handleApi(req, res, pathname) {
   }
 }
 
-function safePublicPath(pathname) {
+function safeStaticPath(pathname) {
   const decodedPath = decodeURIComponent(pathname);
   const requestedPath = decodedPath === '/' ? '/index.html' : decodedPath;
-  const filePath = path.normalize(path.join(PUBLIC_DIR, requestedPath));
+  const filePath = path.normalize(path.join(STATIC_DIR, requestedPath));
 
-  if (!filePath.startsWith(PUBLIC_DIR)) {
+  if (!filePath.startsWith(STATIC_DIR)) {
     return null;
   }
 
@@ -147,22 +151,28 @@ function safePublicPath(pathname) {
 }
 
 function handleStatic(req, res, pathname) {
-  const filePath = safePublicPath(pathname);
-  if (!filePath || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+  const filePath = safeStaticPath(pathname);
+  const fallbackPath = path.join(STATIC_DIR, 'index.html');
+  const resolvedPath = filePath && fs.existsSync(filePath) && !fs.statSync(filePath).isDirectory()
+    ? filePath
+    : (fs.existsSync(fallbackPath) ? fallbackPath : null);
+
+  if (!resolvedPath) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Not Found');
     return;
   }
 
-  const ext = path.extname(filePath);
+  const ext = path.extname(resolvedPath);
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
   try {
-    const data = fs.readFileSync(filePath);
-    const shouldRevalidate = ['.html', '.css', '.js'].includes(ext);
+    const data = fs.readFileSync(resolvedPath);
+    const shouldRevalidate = ext === '.html';
     res.writeHead(200, {
       'Content-Type': contentType,
-      'Cache-Control': shouldRevalidate ? 'no-cache' : 'public, max-age=3600',
+      'Cache-Control': shouldRevalidate ? 'no-store, max-age=0' : 'public, max-age=31536000, immutable',
+      'X-App-Version': APP_VERSION,
     });
     res.end(data);
   } catch (err) {

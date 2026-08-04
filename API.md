@@ -1,4 +1,4 @@
-# Outlook IMAP / Graph API 文档
+# 邮箱取件系统 API 文档
 
 本文档描述当前项目提供的后端接口。线上示例域名：
 
@@ -21,6 +21,7 @@ http://localhost:3000
 | `/api/refresh-token` | `POST` | 使用 refresh token 换取 access token | 是 |
 | `/api/fetch-graph` | `POST` | 通过 Microsoft Graph 取件 | 是 |
 | `/api/fetch-imap` | `POST` | 通过 Outlook IMAP XOAUTH2 取件 | 是 |
+| `/api/fetch-proton` | `POST` | 通过 Proton Mail API 取件并 PGP 解密正文 | 是 |
 | `/api/send-graph` | `POST` | 通过 Microsoft Graph 发件 | 是 |
 
 除 `/healthz` 外，API 支持 `OPTIONS` 预检请求。服务端 CORS 默认允许 `*`，可通过 `CORS_ORIGIN` 环境变量调整。
@@ -82,11 +83,11 @@ sessionId.nonce.timestamp.iv.ciphertext
 | 请求时间窗 | `2` 分钟 | 由 `SECURITY_REQUEST_WINDOW_MS` 控制 |
 | nonce 防重放记忆时间 | `10` 分钟 | 由 `SECURITY_NONCE_TTL_MS` 控制 |
 
-前端已有可复用实现：`public/js/app.js` 里的 `secureApiFetch()`、`createSecureEnvelope()`。
+前端已有可复用实现：`frontend/src/App.jsx` 里的 `secureApiFetch()`、`createSecureEnvelope()`。
 
-## 通用账号字段
+## Outlook 通用账号字段
 
-取件和发件接口都支持两种鉴权方式。
+Outlook 取件和发件接口都支持两种鉴权方式。
 
 方式一：传 `clientId + refreshToken`，服务端自动刷新 access token：
 
@@ -107,7 +108,7 @@ sessionId.nonce.timestamp.iv.ciphertext
 }
 ```
 
-如果传入 `accessToken`，服务端不会刷新 token。若未传 `accessToken`，必须提供 `clientId` 和 `refreshToken`。
+如果传入 `accessToken`，服务端不会刷新 token。若未传 `accessToken`，必须提供 `clientId` 和 `refreshToken`。Proton 账号字段见 `/api/fetch-proton`。
 
 ## Access Token 缓存
 
@@ -361,7 +362,9 @@ curl -X POST https://mail.chatai.codes/api/security-session \
 {
   "success": false,
   "protocol": "imap",
-  "error": "IMAP: IMAP 认证失败，请检查账号权限和令牌 scope",
+  "error": "IMAP: IMAP 认证失败，令牌没有通过服务器校验",
+  "reason": "XOAUTH2 登录阶段被拒绝，常见原因是令牌缺少 IMAP.AccessAsUser.All、账号未启用 IMAP，或令牌已失效",
+  "action": "请确认账号已启用 IMAP，并重新授权包含 IMAP.AccessAsUser.All 的 refresh_token",
   "detail": "Authentication failed",
   "emails": []
 }
@@ -375,9 +378,92 @@ curl -X POST https://mail.chatai.codes/api/security-session \
 | IMAP port | `993` |
 | 加密 | TLS |
 | 认证 | XOAUTH2 |
-| 默认文件夹 | 自动识别 `\\Inbox` 和 `\\Junk`，失败时回退到 `INBOX` 和 `JUNK` |
+| 默认文件夹 | 自动识别 `\\Inbox` 和 `\\Junk`，列表失败时带诊断回退到 `INBOX` 和 `JUNK` |
 | 单接口最大 limit | `10` |
 | 去重 | 按 `messageId` 或 `subject + date + folder` |
+
+`IMAP: Command failed` 只表示 Outlook IMAP 服务器返回了 `NO/BAD`。新版错误会尽量带出 `IMAP stage`、文件夹、服务器状态和响应文本；它不能单独证明账号一定未开通 IMAP，也可能是令牌 scope、文件夹访问、搜索条件或临时限制。批量取件时，同一账号只要 Graph 或 IMAP 任一协议成功，另一协议错误不会展示在最终失败区。
+
+## POST /api/fetch-proton
+
+通过 Proton Mail API 获取邮件列表、单封详情，并用账号私钥 PGP 解密正文。
+
+解密后的业务请求体：
+
+```json
+{
+  "email": "user@proton.me",
+  "password": "Proton 密码",
+  "uid": "可选，已保存的 UID",
+  "accessToken": "可选，已保存的 access token",
+  "refreshToken": "可选，已保存的 refresh token",
+  "keyword": "搜索关键词，可选",
+  "limit": 10,
+  "sender": "sender@example.com",
+  "folder": "0"
+}
+```
+
+参数说明：
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `email` | string | 是 | - | Proton 邮箱地址 |
+| `password` | string | 是 | - | 用于 SRP 登录和 PGP 私钥解密 |
+| `uid` | string | 否 | - | 已保存 Proton 会话 UID |
+| `accessToken` | string | 否 | - | 已保存 Proton access token |
+| `refreshToken` | string | 否 | - | 已保存 Proton refresh token，失效时若有密码会自动重新登录 |
+| `keyword` | string | 否 | `""` | 按邮件元数据关键词过滤 |
+| `limit` | number | 否 | `10` | 最终返回数量，最多 `30` |
+| `sender` | string | 否 | `""` | 按发件人邮箱过滤 |
+| `folder` | string | 否 | `"0"` | Proton LabelID，`0` 为收件箱 |
+
+成功响应：
+
+```json
+{
+  "success": true,
+  "protocol": "proton",
+  "count": 1,
+  "emails": [
+    {
+      "id": "<message-id>",
+      "messageId": "<message-id>",
+      "subject": "邮件主题",
+      "from": "sender@example.com",
+      "fromName": "Sender Name",
+      "date": "2026-08-04T00:00:00+00:00",
+      "bodyPreview": "预览文本",
+      "bodyHtml": "<p>HTML 内容</p>",
+      "bodyText": "纯文本内容",
+      "hasAttachments": false,
+      "folder": "inbox",
+      "protocol": "proton"
+    }
+  ],
+  "session": {
+    "uid": "<uid>",
+    "accessToken": "<new access token>",
+    "refreshToken": "<new refresh token>",
+    "expiresIn": 86400,
+    "updated": true
+  }
+}
+```
+
+错误响应：
+
+```json
+{
+  "success": false,
+  "protocol": "proton",
+  "code": "PROTON_TOKEN_INVALID",
+  "error": "Proton 会话令牌无效或已过期",
+  "reason": "Proton API 返回了认证失败，可能是 access_token 过期、refresh_token 已轮换或 UID 不匹配",
+  "action": "请使用账号密码重新登录取件，或导入最新的 Proton refresh_token",
+  "emails": []
+}
+```
 
 ## POST /api/send-graph
 

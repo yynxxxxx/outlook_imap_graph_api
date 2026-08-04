@@ -28,7 +28,7 @@ function buildXOAuth2Token(email, accessToken) {
  * @param {string|string[]} [options.folder] - 指定文件夹；默认同时读取收件箱和垃圾邮件
  * @param {string[]} [options.folders] - 指定多个文件夹
  * @param {string} [options.sender] - 发件人过滤
- * @returns {Promise<Array>} - 邮件列表
+ * @returns {Promise<{emails: Array, diagnostics: Array}>} - 邮件列表和文件夹级诊断
  */
 async function fetchEmailsViaIMAP(email, accessToken, options = {}) {
   const { keyword = '', limit = 5, folder, folders, sender = '' } = options;
@@ -46,12 +46,28 @@ async function fetchEmailsViaIMAP(email, accessToken, options = {}) {
   });
 
   const emails = [];
+  const diagnostics = [];
+  let successfulFolders = 0;
 
   try {
     // 连接并认证
-    await client.connect();
+    try {
+      await client.connect();
+    } catch (err) {
+      throw annotateImapError(err, 'authenticate');
+    }
 
-    const targetFolders = await resolveTargetFolders(client, { folder, folders });
+    let targetFolders;
+    try {
+      targetFolders = await resolveTargetFolders(client, { folder, folders });
+    } catch (err) {
+      const annotated = annotateImapError(err, 'list');
+      diagnostics.push(toImapDiagnostic(annotated));
+      targetFolders = normalizeFolderInput(folders || folder);
+      if (targetFolders.length === 0) {
+        targetFolders = DEFAULT_IMAP_FOLDERS;
+      }
+    }
     const perFolderLimit = Math.max(limit, Math.ceil(limit / Math.max(targetFolders.length, 1)));
 
     for (const targetFolder of targetFolders) {
@@ -62,8 +78,11 @@ async function fetchEmailsViaIMAP(email, accessToken, options = {}) {
           sender,
         });
         emails.push(...folderEmails);
+        successfulFolders += 1;
       } catch (folderErr) {
-        console.error(`IMAP 文件夹 ${targetFolder} 取件失败:`, folderErr.message);
+        const annotated = annotateImapError(folderErr, folderErr.imapStage || 'select', targetFolder);
+        diagnostics.push(toImapDiagnostic(annotated));
+        console.error(`IMAP 文件夹 ${targetFolder} 取件失败:`, annotated.message);
       }
     }
   } finally {
@@ -75,7 +94,22 @@ async function fetchEmailsViaIMAP(email, accessToken, options = {}) {
     }
   }
 
-  return deduplicateAndLimit(emails, limit);
+  if (successfulFolders === 0 && diagnostics.length > 0) {
+    const firstDiagnostic = diagnostics[0];
+    const error = new Error('IMAP 没有成功读取任何目标文件夹');
+    error.code = 'IMAP_NO_FOLDER_SUCCEEDED';
+    error.imapStage = firstDiagnostic.stage;
+    error.imapFolder = firstDiagnostic.folder;
+    error.responseStatus = firstDiagnostic.responseStatus;
+    error.responseText = firstDiagnostic.responseText;
+    error.executedCommand = firstDiagnostic.executedCommand;
+    throw error;
+  }
+
+  return {
+    emails: deduplicateAndLimit(emails, limit),
+    diagnostics,
+  };
 }
 
 async function resolveTargetFolders(client, options = {}) {
@@ -84,19 +118,14 @@ async function resolveTargetFolders(client, options = {}) {
     return explicitFolders;
   }
 
-  try {
-    const mailboxes = await client.list();
-    const inbox = findMailboxPath(mailboxes, mailbox => mailbox.specialUse === '\\Inbox' || /^inbox$/i.test(mailbox.path));
-    const junk = findMailboxPath(mailboxes, mailbox =>
-      mailbox.specialUse === '\\Junk' ||
-      JUNK_FOLDER_CANDIDATES.some(name => normalizeFolderName(mailbox.path) === normalizeFolderName(name))
-    );
+  const mailboxes = await client.list();
+  const inbox = findMailboxPath(mailboxes, mailbox => mailbox.specialUse === '\\Inbox' || /^inbox$/i.test(mailbox.path));
+  const junk = findMailboxPath(mailboxes, mailbox =>
+    mailbox.specialUse === '\\Junk' ||
+    JUNK_FOLDER_CANDIDATES.some(name => normalizeFolderName(mailbox.path) === normalizeFolderName(name))
+  );
 
-    return uniqueFolders([inbox || 'INBOX', junk].filter(Boolean));
-  } catch (err) {
-    console.error('IMAP 文件夹列表读取失败，回退到默认文件夹:', err.message);
-    return DEFAULT_IMAP_FOLDERS;
-  }
+  return uniqueFolders([inbox || 'INBOX', junk].filter(Boolean));
 }
 
 function normalizeFolderInput(input) {
@@ -130,9 +159,15 @@ function uniqueFolders(folders) {
 async function fetchEmailsFromIMAPFolder(client, folder, options = {}) {
   const { keyword = '', limit = 5, sender = '' } = options;
   const emails = [];
-  const mailbox = await client.getMailboxLock(folder);
+  let mailbox;
 
   try {
+    try {
+      mailbox = await client.getMailboxLock(folder);
+    } catch (err) {
+      throw annotateImapError(err, 'select', folder);
+    }
+
     // 构建 IMAP 搜索条件
     const searchCriteria = {};
 
@@ -150,11 +185,15 @@ async function fetchEmailsFromIMAPFolder(client, folder, options = {}) {
 
     // 搜索邮件，默认获取所有，然后取最新的 N 封
     let messageIds;
-    if (Object.keys(searchCriteria).length > 0) {
-      messageIds = await client.search(searchCriteria);
-    } else {
-      // 无搜索条件时获取所有邮件 UID
-      messageIds = await client.search({ all: true });
+    try {
+      if (Object.keys(searchCriteria).length > 0) {
+        messageIds = await client.search(searchCriteria);
+      } else {
+        // 无搜索条件时获取所有邮件 UID
+        messageIds = await client.search({ all: true });
+      }
+    } catch (err) {
+      throw annotateImapError(err, 'search', folder);
     }
 
     if (!messageIds || messageIds.length === 0) {
@@ -197,10 +236,27 @@ async function fetchEmailsFromIMAPFolder(client, folder, options = {}) {
       }
     }
   } finally {
-    mailbox.release();
+    mailbox?.release();
   }
 
   return emails;
+}
+
+function annotateImapError(err, stage, folder = '') {
+  const error = err instanceof Error ? err : new Error(String(err || 'IMAP 未知错误'));
+  if (!error.imapStage) error.imapStage = stage;
+  if (folder && !error.imapFolder) error.imapFolder = folder;
+  return error;
+}
+
+function toImapDiagnostic(err) {
+  return {
+    stage: err?.imapStage || 'unknown',
+    folder: err?.imapFolder || '',
+    responseStatus: err?.responseStatus || '',
+    responseText: err?.responseText || '',
+    executedCommand: err?.executedCommand || '',
+  };
 }
 
 function deduplicateAndLimit(emails, limit) {

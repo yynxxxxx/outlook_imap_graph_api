@@ -23,9 +23,11 @@ const MIME_TYPES = {
 
 // 加载 API 路由处理函数
 const apiHandlers = {
+  '/api/security-session': require('./api/security-session'),
   '/api/refresh-token': require('./api/refresh-token'),
   '/api/fetch-graph': require('./api/fetch-graph'),
   '/api/fetch-imap': require('./api/fetch-imap'),
+  '/api/fetch-proton': require('./api/fetch-proton'),
   '/api/send-graph': require('./api/send-graph'),
 };
 

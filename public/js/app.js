@@ -9,7 +9,7 @@
 
 // ==================== 全局状态 ====================
 const STORAGE_KEY = 'outlook_accounts';
-const APP_VERSION = '1.2.1-live-results';
+const APP_VERSION = '1.3.0-mail-system';
 const EXPORT_SEPARATOR = '----';
 const SECURITY_RETRY_LIMIT = 1;
 
