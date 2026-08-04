@@ -34,7 +34,8 @@ export default {
       return handleTrackFetch(request, env);
     }
 
-    const container = env.OUTLOOK_API.getByName("singleton");
+    const revision = String(env.CONTAINER_REVISION || "current").trim() || "current";
+    const container = env.OUTLOOK_API.getByName(`singleton-${revision}`);
     await container.startAndWaitForPorts({
       startOptions: {
         envVars: {
