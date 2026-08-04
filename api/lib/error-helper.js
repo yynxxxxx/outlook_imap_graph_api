@@ -5,6 +5,8 @@ function normalizeWhitespace(value) {
 function getRawErrorDetail(err) {
   const parts = [
     err?.message || err || '未知错误',
+    err?.imapStage ? `IMAP stage: ${err.imapStage}` : '',
+    err?.imapFolder ? `IMAP folder: ${err.imapFolder}` : '',
     err?.responseText ? `IMAP response: ${err.responseText}` : '',
     err?.responseStatus ? `IMAP status: ${err.responseStatus}` : '',
     err?.executedCommand ? `IMAP command: ${err.executedCommand}` : '',
@@ -42,22 +44,50 @@ function toPublicError(err, protocol = '') {
     lower.includes('authentication failed') ||
     lower.includes('invalid credentials') ||
     lower.includes('auth=') ||
-    lower.includes('no authenticate failed')
+    lower.includes('no authenticate failed') ||
+    lower.includes('login is disabled')
   ) {
-    code = 'IMAP_AUTH_FAILED';
-    message = 'IMAP 认证失败，请检查账号权限和令牌 scope';
-    reason = 'IMAP 服务器拒绝 XOAUTH2 登录，常见原因是令牌没有 IMAP.AccessAsUser.All 权限、账号未启用 IMAP 或令牌已失效';
-    action = '请确认 Outlook 账号已启用 IMAP，并重新授权包含 IMAP 权限的 refresh_token';
+    if (lower.includes('login is disabled')) {
+      code = 'IMAP_NOT_AVAILABLE';
+      message = 'IMAP 登录被服务器禁用';
+      reason = '服务器明确返回 Login is disabled，当前账号或租户没有开放 IMAP 登录';
+      action = '请在 Outlook/Exchange 管理设置中启用 IMAP；Graph 成功时无需处理此错误';
+    } else {
+      code = 'IMAP_AUTH_FAILED';
+      message = 'IMAP 认证失败，令牌没有通过服务器校验';
+      reason = 'XOAUTH2 登录阶段被拒绝，常见原因是令牌缺少 IMAP.AccessAsUser.All、账号未启用 IMAP，或令牌已失效';
+      action = '请确认账号已启用 IMAP，并重新授权包含 IMAP.AccessAsUser.All 的 refresh_token';
+    }
   } else if (lower.includes('ethrottle') || lower.includes('request is throttled') || lower.includes('backoff time')) {
     code = 'IMAP_RATE_LIMITED';
     message = 'IMAP 被 Microsoft 限流，请稍后重试';
     reason = 'Outlook IMAP 返回了限流或退避提示，通常是短时间批量账号/批量命令过多';
     action = '请降低批量取件数量或间隔后重试；Graph 成功的账号可以忽略 IMAP 失败';
   } else if (lower.includes('command failed') && normalizedProtocol === 'imap') {
-    code = 'IMAP_COMMAND_REJECTED';
-    message = 'IMAP 命令被 Outlook 服务器拒绝';
-    reason = '服务器返回 NO/BAD，常见原因是账号未启用 IMAP、令牌缺少 IMAP 权限、邮箱文件夹不可访问或 IMAP 临时限制';
-    action = '如果 Graph 已成功取件可以忽略；如果需要 IMAP，请确认账号开启 IMAP 并重新授权包含 IMAP.AccessAsUser.All 的 refresh_token';
+    const stage = err?.imapStage || (lower.match(/imap stage: ([a-z]+)/)?.[1] || '');
+    code = stage === 'list' ? 'IMAP_FOLDER_LIST_REJECTED' : 'IMAP_COMMAND_REJECTED';
+    if (stage === 'select') {
+      message = 'IMAP 打开邮箱文件夹被服务器拒绝';
+      reason = '失败发生在打开文件夹阶段，不能仅凭此错误认定 IMAP 未开通；也可能是文件夹名称、邮箱权限或服务器临时策略导致';
+      action = '优先检查收件箱/垃圾邮件文件夹和 IMAP 权限；如果 Graph 已成功取件，可以忽略这条 IMAP 失败';
+    } else if (stage === 'search') {
+      message = 'IMAP 搜索命令被服务器拒绝';
+      reason = '失败发生在 SEARCH 阶段，常见原因是 IMAP 未开放、令牌缺少 IMAP.AccessAsUser.All、搜索条件不被服务器接受或 Microsoft 临时限制';
+      action = '不能仅凭 Command failed 断言 IMAP 未开通；请查看服务器响应文本，必要时重新授权 IMAP scope 或稍后重试';
+    } else if (stage === 'list') {
+      message = 'IMAP 文件夹列表命令被服务器拒绝';
+      reason = '失败发生在 LIST 阶段，可能是 IMAP 权限、邮箱策略或服务器不允许列出文件夹；这不等同于已确认 IMAP 未开通';
+      action = '如果收件箱仍能读取可以忽略；否则检查 IMAP 设置和令牌权限';
+    } else {
+      message = 'IMAP 命令被 Outlook 服务器拒绝';
+      reason = '服务器返回 NO/BAD，但当前只提供了 Command failed，无法单独确认是未开通 IMAP；也可能是权限、文件夹访问、搜索命令或临时限制';
+      action = '请查看详细响应判断具体阶段；Graph 已成功取件时无需处理另一协议错误';
+    }
+  } else if (normalizedProtocol === 'proton') {
+    code = err?.code || 'PROTON_FETCH_FAILED';
+    message = raw;
+    reason = 'Proton API 登录、令牌、邮箱读取或正文解密失败';
+    action = '请检查 Proton 邮箱和密码；若使用会话令牌，请更新 access_token/refresh_token 后重试';
   } else if (lower.includes('timeout') || lower.includes('etimedout') || lower.includes('esockettimedout')) {
     code = 'UPSTREAM_TIMEOUT';
     message = '连接超时，请稍后重试或降低取件数量';

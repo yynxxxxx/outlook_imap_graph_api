@@ -39,7 +39,7 @@ module.exports = async function handler(req, res) {
     }
 
     // 获取邮件（限制数量，适配 10s 超时）
-    const emails = await fetchEmailsViaIMAP(email, token, {
+    const result = await fetchEmailsViaIMAP(email, token, {
       keyword: keyword || '',
       limit: Math.min(limit || 5, 10), // 最多10封，建议5封
       folder,
@@ -50,8 +50,9 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       success: true,
       protocol: 'imap',
-      count: emails.length,
-      emails,
+      count: result.emails.length,
+      emails: result.emails,
+      diagnostics: result.diagnostics || [],
     });
   } catch (err) {
     console.error('IMAP 取件错误:', err);

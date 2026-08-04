@@ -1,0 +1,4 @@
+curl_cffi>=0.13,<1
+pgpy>=0.6,<1
+bcrypt>=4,<5
+standard-imghdr>=3,<4
