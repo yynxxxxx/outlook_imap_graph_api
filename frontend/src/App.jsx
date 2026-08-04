@@ -50,6 +50,7 @@ const ROUTES = [
 ];
 
 const ROUTE_BY_KEY = Object.fromEntries(ROUTES.map(route => [route.key, route]));
+const RESULT_TABS = ['codes', 'all', 'accounts'];
 
 function getRouteFromLocation() {
   if (window.location.pathname === '/overview') return 'overview';
@@ -94,6 +95,24 @@ function normalizeStats(stats = {}) {
     todayProtonFetches: Number(stats.todayProtonFetches || 0),
     date: stats.date || fallback.date,
   };
+}
+
+function readActiveResultTab(kind) {
+  try {
+    const value = localStorage.getItem(`mail_result_tab_${kind}`);
+    return RESULT_TABS.includes(value) ? value : 'codes';
+  } catch {
+    return 'codes';
+  }
+}
+
+function persistActiveResultTab(kind, tab) {
+  if (!RESULT_TABS.includes(tab)) return;
+  try {
+    localStorage.setItem(`mail_result_tab_${kind}`, tab);
+  } catch {
+    // 页签记忆失败不影响取件。
+  }
 }
 
 export default function App() {
@@ -230,15 +249,20 @@ function useMailboxController(kind, showToast, recordFetch) {
   ));
   const [status, setStatus] = useState({ tone: 'ready', text: '就绪' });
   const [fetching, setFetching] = useState(false);
-  const [activeTab, setActiveTab] = useState('codes');
+  const [activeTab, setActiveTabState] = useState(() => readActiveResultTab(kind));
   const [accountResults, setAccountResults] = useState([]);
   const [issues, setIssues] = useState([]);
   const [detailEmail, setDetailEmail] = useState(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const abortRef = useRef({ cancelled: false });
 
   useEffect(() => {
     persistAccounts(accounts, kind);
   }, [accounts, kind]);
+
+  useEffect(() => {
+    persistActiveResultTab(kind, activeTab);
+  }, [activeTab, kind]);
 
   const visibleAccounts = useMemo(() => {
     const query = accountQuery.trim().toLowerCase();
@@ -294,9 +318,23 @@ function useMailboxController(kind, showToast, recordFetch) {
 
   function deleteSelected() {
     if (!selectedIds.size) return;
+    setDeleteConfirmOpen(true);
+  }
+
+  function confirmDeleteSelected() {
+    if (!selectedIds.size) {
+      setDeleteConfirmOpen(false);
+      return;
+    }
+    const count = selectedIds.size;
     updateAccounts(accounts.filter(account => !selectedIds.has(account.id)));
     setSelectedIds(new Set());
-    showToast(`已删除 ${selectedIds.size} 个${pageCopy(kind).accountName}`, 'success');
+    setDeleteConfirmOpen(false);
+    showToast(`已删除 ${count} 个${pageCopy(kind).accountName}`, 'success');
+  }
+
+  function setActiveTab(tab) {
+    if (RESULT_TABS.includes(tab)) setActiveTabState(tab);
   }
 
   function importAccounts() {
@@ -338,7 +376,6 @@ function useMailboxController(kind, showToast, recordFetch) {
     setFetching(true);
     setIssues([]);
     setDetailEmail(null);
-    setActiveTab('accounts');
     setStatus({ tone: 'loading', text: `取件中 ${runnable.length} 个账号` });
     setAccountResults(runnable.map((account, index) => ({
       id: account.id,
@@ -515,11 +552,14 @@ function useMailboxController(kind, showToast, recordFetch) {
     issues,
     detailEmail,
     setDetailEmail,
+    deleteConfirmOpen,
+    setDeleteConfirmOpen,
     progress,
     completedCount,
     toggleSelect,
     selectAllVisible,
     deleteSelected,
+    confirmDeleteSelected,
     importAccounts,
     exportAccounts,
     startFetch,
@@ -800,6 +840,7 @@ function MailboxPage({ controller }) {
       </section>
 
       {controller.importOpen ? <ImportModal controller={controller} /> : null}
+      {controller.deleteConfirmOpen ? <DeleteConfirmModal controller={controller} /> : null}
       {controller.detailEmail ? <EmailDetail email={controller.detailEmail} onClose={() => controller.setDetailEmail(null)} /> : null}
     </div>
   );
@@ -1126,6 +1167,44 @@ function ImportModal({ controller }) {
           <div className="modal-foot">
             <button className="btn subtle" onClick={close} type="button">取消</button>
             <button className="btn primary" onClick={controller.importAccounts} type="button"><Check size={16} />导入</button>
+          </div>
+        </>
+      )}
+    </AnimatedModal>
+  );
+}
+
+function DeleteConfirmModal({ controller }) {
+  const copy = pageCopy(controller.kind);
+  const preview = controller.selectedAccounts.slice(0, 6);
+  const hiddenCount = Math.max(0, controller.selectedAccounts.length - preview.length);
+
+  return (
+    <AnimatedModal label={`确认删除${copy.accountName}`} onClose={() => controller.setDeleteConfirmOpen(false)}>
+      {close => (
+        <>
+          <div className="modal-head">
+            <div className="title-with-icon min-w-0 text-amber-900">
+              <AlertCircle size={18} />
+              <h2>确认删除{copy.accountName}</h2>
+            </div>
+            <button className="icon-button compact" onClick={close} aria-label="关闭" type="button"><X size={18} /></button>
+          </div>
+          <div className="modal-content">
+            <p className="confirm-copy">
+              将从当前页面删除选中的 {controller.selectedAccounts.length} 个{copy.accountName}。邮箱数据仍只保存在本地浏览器，删除后如需恢复需要重新导入。
+            </p>
+            <div className="delete-preview-list" aria-label="将删除的邮箱">
+              {preview.map(account => <span key={account.id} className="truncate">{account.email}</span>)}
+              {hiddenCount ? <span className="muted">另有 {hiddenCount} 个未显示</span> : null}
+            </div>
+          </div>
+          <div className="modal-foot">
+            <button className="btn subtle" onClick={close} type="button">取消</button>
+            <button className="btn danger" onClick={controller.confirmDeleteSelected} type="button">
+              <Trash2 size={16} />
+              确认删除
+            </button>
           </div>
         </>
       )}

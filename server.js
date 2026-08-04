@@ -15,7 +15,8 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 
 const DIST_DIR = path.join(__dirname, 'dist');
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const STATIC_DIR = fs.existsSync(DIST_DIR) ? DIST_DIR : PUBLIC_DIR;
+const UI_VARIANT = process.env.UI_VARIANT === 'legacy' ? 'legacy' : 'modern';
+const STATIC_DIR = UI_VARIANT === 'legacy' || !fs.existsSync(DIST_DIR) ? PUBLIC_DIR : DIST_DIR;
 const APP_VERSION = require('./package.json').version;
 const runtimeFetchEvents = [];
 const MAX_RUNTIME_EVENTS = 50000;
@@ -248,6 +249,7 @@ function handleStatic(req, res, pathname) {
       'Content-Type': contentType,
       'Cache-Control': shouldRevalidate ? 'no-store, max-age=0' : 'public, max-age=31536000, immutable',
       'X-App-Version': APP_VERSION,
+      'X-UI-Variant': UI_VARIANT,
     });
     res.end(data);
   } catch (err) {
