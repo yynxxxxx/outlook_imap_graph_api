@@ -1,3 +1,5 @@
+
+
 # 邮箱取件系统
 
 支持 Outlook IMAP OAuth2、Microsoft Graph API 和 Proton Mail API 的批量取件工具。
@@ -86,7 +88,7 @@ access token 缓存只保存在当前 Node.js 进程内存中，不写入硬盘�
 
 ```bash
 docker build -t outlook-fetcher .
-docker run -d --name outlook-fetcher -p 3000:3000 outlook-fetcher
+docker run -d --name outlook-fetcher -p 3000:3000 -e PORT=3000 outlook-fetcher
 ```
 
 ## Cloudflare Workers Paid / Containers 部署
