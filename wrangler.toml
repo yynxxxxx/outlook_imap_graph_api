@@ -5,7 +5,7 @@ workers_dev = true
 
 [vars]
 UI_VARIANT = "legacy"
-CONTAINER_REVISION = "1.4.6"
+CONTAINER_REVISION = "1.4.7"
 
 [[routes]]
 pattern = "mail.chatai.codes"
@@ -14,8 +14,8 @@ custom_domain = true
 [[containers]]
 class_name = "OutlookImapGraphApi"
 image = "./Dockerfile"
-instance_type = "lite"
-max_instances = 1
+instance_type = "basic"
+max_instances = 2
 
 [[durable_objects.bindings]]
 name = "OUTLOOK_API"
