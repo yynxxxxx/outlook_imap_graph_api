@@ -1,31 +1,23 @@
 name = "outlook-imap-graph-api"
-main = "src/container-worker.js"
+main = "src/graph-worker.js"
 compatibility_date = "2026-07-12"
+compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
-[vars]
-UI_VARIANT = "legacy"
-CONTAINER_REVISION = "1.4.7"
-
-[[routes]]
-pattern = "mail.chatai.codes"
-custom_domain = true
-
-[[containers]]
-class_name = "OutlookImapGraphApi"
-image = "./Dockerfile"
-instance_type = "basic"
-max_instances = 2
-
-[[durable_objects.bindings]]
-name = "OUTLOOK_API"
-class_name = "OutlookImapGraphApi"
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/api/*"]
 
 [[d1_databases]]
 binding = "FETCH_STATS_DB"
 database_name = "outlook-imap-graph-api-stats"
 database_id = "17bddc33-8aed-4d45-b412-e9cd69ce1fb3"
 
+[[routes]]
+pattern = "mail.chatai.codes"
+custom_domain = true
+
 [[migrations]]
-tag = "containers-v2"
-new_sqlite_classes = ["OutlookImapGraphApi"]
+tag = "remove-container-v1"
+deleted_classes = ["OutlookImapGraphApi"]
